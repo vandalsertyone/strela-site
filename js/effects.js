@@ -10,6 +10,7 @@ export function initEffects({ stage, chat, input, log, fab }) {
   if (finePointer.matches && !reduced.matches) {
     tilt();
     parallax();
+    spotlight();
   }
   stickyButton(chat, fab);
   keyboardViewport(stage, input, log);
@@ -91,6 +92,18 @@ function tilt() {
       card.style.setProperty("--rx", "0deg");
       card.style.setProperty("--ry", "0deg");
     });
+  });
+}
+
+// «Фонарик» на карточках секций: мягкое свечение идёт за курсором (css: .spot::after)
+function spotlight() {
+  document.querySelectorAll(".step, .stat, .fact").forEach((n) => {
+    n.classList.add("spot");
+    n.addEventListener("pointermove", (e) => {
+      const r = n.getBoundingClientRect();
+      n.style.setProperty("--sx", e.clientX - r.left + "px");
+      n.style.setProperty("--sy", e.clientY - r.top + "px");
+    }, { passive: true });
   });
 }
 

@@ -6,20 +6,30 @@
   --card-shadow-hover: inset 0 1px 0 rgba(255,255,255,.08), 0 1px 0 rgba(0,0,0,.25), 0 26px 48px -26px rgba(0,0,0,.75);
 }
 .pc-body{overflow-x:hidden}
-.pc-topbar{position:relative;justify-content:space-between;padding:14px calc(14px + var(--sar)) 6px calc(14px + var(--sal))}
+/* шапка: три колонки по ширине контейнера — логотип ровно по центру, края совпадают с контентом */
+.pc-topbar{position:relative;display:grid;grid-template-columns:1fr auto 1fr;width:min(1180px,100% - 24px - var(--sal) - var(--sar));margin-inline:auto;padding:14px 0 6px}
 .pc-topbar .logo img{height:26px}
-.pc-back{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 6px;color:var(--muted);font-size:13px;font-weight:600;text-decoration:none}
-.pc-back .ico{width:18px;height:18px}
+.pc-topbar .topbar__link{justify-self:end}
+.pc-back{justify-self:start;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 6px 0 2px;color:var(--muted);font-size:13px;font-weight:600;text-decoration:none;transition:color .2s}
+.pc-back .ico{width:18px;height:18px;transition:transform .3s var(--spring)}
 
 .pc-hero{padding:28px 16px 6px;text-align:center}
 .pc-hero h1{margin-top:10px;font:700 clamp(28px,7.5vw,52px)/1.08 var(--font-h);letter-spacing:-.03em}
-.pc-hero .lead{max-width:56ch;margin:14px auto 0}
+.pc-hero .lead{max-width:56ch;margin:14px auto 0;text-wrap:pretty}
 
-.pc-tabs{display:flex;justify-content:center;gap:10px;margin-top:26px;flex-wrap:wrap}
-.pc-tab{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:50px;padding:0 20px;border:1px solid var(--line-2);border-radius:999px;background:rgba(255,255,255,.045);color:var(--muted);font:700 14px/1.2 var(--font-b);cursor:pointer;box-shadow:var(--card-shadow);transition:background .2s,border-color .2s,color .2s,transform .2s var(--spring)}
-.pc-tab .ico{width:18px;height:18px}
-.pc-tab.is-active{color:var(--text);border-color:rgba(185,255,1,.55);background:rgba(185,255,1,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 34px -10px rgba(185,255,1,.65)}
+/* вкладки — единый переключатель: подсветка-«пилюля» переезжает под активную вкладку (data-active ставит app.js) */
+.pc-tabs{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:4px;width:min(100%,440px);margin:26px auto 0;padding:5px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line-2);box-shadow:var(--card-shadow)}
+.pc-tabs__glider{position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 7px);border-radius:999px;background:linear-gradient(160deg,rgba(185,255,1,.2),rgba(185,255,1,.06));border:1px solid rgba(185,255,1,.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 34px -10px rgba(185,255,1,.7);transition:transform .55s var(--spring)}
+.pc-tabs[data-active="ai"] .pc-tabs__glider{transform:translateX(calc(100% + 4px))}
+.pc-tab{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:48px;padding:0 14px;border:0;border-radius:999px;background:none;color:var(--muted);font:700 14px/1.2 var(--font-b);white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .3s,transform .2s var(--spring)}
+.pc-tab .ico{width:18px;height:18px;transition:color .3s}
+.pc-tab.is-active{color:var(--text)}
+.pc-tab.is-active .ico{color:var(--lime)}
 .pc-tab:active{transform:scale(.97)}
+@media (max-width:420px){.pc-tab{gap:6px;padding:0 8px;font-size:13px}.pc-tab .ico{display:none}.pc-tab .soon{font-size:9.5px;padding:2px 6px}}
+/* смена вкладки: панель мягко проявляется */
+.is-entering{animation:panel-in .6s var(--ease)}
+@keyframes panel-in{from{opacity:0;transform:translateY(18px)}}
 .soon{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--cyan);color:#03222a;font-size:10.5px;font-weight:800;letter-spacing:.02em}
 .soon--inline{padding:1px 7px;font-size:10px}
 
@@ -71,7 +81,11 @@
 .compat{margin-top:14px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid var(--line);box-shadow:var(--card-shadow)}
 .compat__head{display:flex;align-items:center;gap:12px;font-size:13.5px;font-weight:600}
 .compat__head .ico{width:18px;height:18px;flex:none}
-.compat__badge{flex:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .3s,color .3s}
+.compat__badge{position:relative;flex:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .3s,color .3s}
+.compat__head.is-pulse .compat__badge{animation:mark-pop .55s var(--spring)}
+.compat__head.is-pulse .compat__badge::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid currentColor;animation:ring-out .9s var(--ease) forwards}
+.compat__head.is-pulse #compatText{animation:txt-in .45s var(--ease)}
+@keyframes txt-in{from{opacity:0;transform:translateX(-6px)}}
 .compat__head.is-ok{color:#c6f77a}
 .compat__head.is-ok .compat__badge{background:rgba(185,255,1,.14);color:var(--lime)}
 .compat__head.is-warning{color:#ffd98a}
@@ -93,15 +107,27 @@
 .pc-step.is-open{border-color:rgba(185,255,1,.22)}
 .pc-step__head{width:100%;display:flex;align-items:center;gap:12px;padding:16px 16px;background:none;border:0;color:var(--text);cursor:pointer;text-align:left;transition:background .2s}
 .pc-step__head:active{background:rgba(255,255,255,.03)}
-.pc-step__ico{width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:13px;background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid var(--line-2);color:var(--muted);transition:color .3s,background .3s,border-color .3s}
+.pc-step__ico{position:relative;width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:13px;background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid var(--line-2);color:var(--muted);transition:color .3s,background .3s,border-color .3s}
 .pc-step__ico .ico{width:22px;height:22px}
 .pc-step.is-done .pc-step__ico{color:var(--lime);background:linear-gradient(160deg,rgba(185,255,1,.22),rgba(185,255,1,.06));border-color:rgba(185,255,1,.4);box-shadow:0 0 18px -8px rgba(185,255,1,.7)}
 .pc-step__title{flex:1;min-width:0}
 .pc-step__title b{display:block;font:700 15px/1.2 var(--font-h)}
 .pc-step__title span{display:block;margin-top:2px;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pc-step__badge{flex:none;font-size:11px;font-weight:700;color:var(--muted)}
-.pc-step__chev{flex:none;width:18px;height:18px;color:var(--muted);transition:transform .3s var(--ease)}
-.pc-step.is-open .pc-step__chev{transform:rotate(180deg)}
+.pc-step__chev{flex:none;width:20px;height:20px;color:var(--muted);transition:transform .45s var(--spring),color .3s}
+.pc-step.is-open .pc-step__chev{transform:rotate(180deg);color:var(--lime)}
+/* номер шага в уголке значка; заполнен — вместо номера лаймовая галочка */
+.pc-step__mark{position:absolute;right:-6px;bottom:-6px;display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#171a24;border:1px solid var(--line-2);color:var(--muted);font:700 10px/1 var(--font-b);font-style:normal}
+.pc-step__mark i{font-style:normal}
+.pc-step__mark .ico{display:none;width:11px;height:11px}
+.pc-step.is-done .pc-step__mark{background:var(--lime);border-color:var(--lime);color:#0a0f00;box-shadow:0 0 12px -2px rgba(185,255,1,.8)}
+.pc-step.is-done .pc-step__mark i{display:none}
+.pc-step.is-done .pc-step__mark .ico{display:block}
+.pc-step.is-open:not(.is-done) .pc-step__mark{border-color:rgba(185,255,1,.6);color:var(--lime)}
+.pc-step.is-just-done .pc-step__mark{animation:mark-pop .6s var(--spring)}
+.pc-step.is-just-done .pc-step__ico::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:1.5px solid var(--lime);animation:ring-out .8s var(--ease) forwards;pointer-events:none}
+@keyframes mark-pop{from{transform:scale(.2) rotate(-40deg)}}
+@keyframes ring-out{from{opacity:.9;transform:scale(1)}to{opacity:0;transform:scale(1.6)}}
 /* раскрытие по высоте через grid 0fr→1fr — без жёсткого max-height, список может быть длинным */
 .pc-step__body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease)}
 .pc-step.is-open .pc-step__body{grid-template-rows:1fr}
@@ -159,7 +185,19 @@
 .pc-summary{position:relative;padding:20px;border-radius:24px;background:linear-gradient(160deg,rgba(185,255,1,.08),rgba(255,255,255,.02));border:1px solid rgba(185,255,1,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 30px 60px -32px rgba(0,0,0,.85);height:max-content;overflow:hidden}
 .pc-summary::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--lime),var(--cyan),transparent);opacity:.8}
 .pc-summary h2{font:700 18px/1.2 var(--font-h);letter-spacing:-.015em}
-.pc-summary__rows{margin-top:14px;display:grid;gap:2px}
+.pc-summary__rows{margin-top:6px;display:grid;gap:2px}
+.pc-summary__rows:empty{display:none}
+/* прогресс сборки */
+.pc-progress{margin-top:12px}
+.pc-progress__row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12.5px;color:var(--muted)}
+.pc-progress__row b{flex:none;font:700 12px/1 var(--font-h);color:var(--text);font-variant-numeric:tabular-nums}
+.pc-progress__bar{position:relative;height:6px;margin-top:8px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.pc-progress__bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:inherit;overflow:hidden;background:linear-gradient(90deg,var(--lime),#7df9c1);box-shadow:0 0 12px rgba(185,255,1,.6);transition:width .7s var(--spring)}
+.pc-progress__bar i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-100%);animation:bar-shine 2.6s ease-in-out infinite}
+.pc-progress.is-done .pc-progress__row span{color:var(--lime);font-weight:600}
+.pc-progress.is-done .pc-progress__bar i{background:linear-gradient(90deg,var(--lime),var(--cyan))}
+@keyframes bar-shine{0%,35%{transform:translateX(-100%)}75%,100%{transform:translateX(100%)}}
+.pc-summary__empty{margin-top:14px;padding:14px;border-radius:14px;border:1px dashed var(--line-2);background:rgba(255,255,255,.02);font-size:13px;color:var(--muted);text-align:center}
 .pc-summary__rows li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
 .pc-summary__rows .k{color:var(--muted)}
 .pc-summary__rows .v{font-weight:600;text-align:right}
@@ -189,7 +227,8 @@
 .pc-upsell__card.is-on{border-color:rgba(185,255,1,.6);background:linear-gradient(160deg,rgba(185,255,1,.12),rgba(185,255,1,.03))}
 /* галочка-переключатель у допов (карточки и окно «Добавим к сборке?») */
 .pc-extra__check{display:flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line-2);color:transparent;transition:background .2s,border-color .2s,color .2s}
-.pc-extra__check .ico{width:14px;height:14px;color:inherit}
+.pc-extra__check .ico{width:14px;height:14px;color:inherit;transform:scale(.3);transition:transform .45s var(--spring)}
+.is-on>.pc-extra__check .ico{transform:none}
 .is-on>.pc-extra__check{border-color:var(--lime);background:var(--lime);color:#0a0f00}
 .pc-upsell__card .pc-extra__check .ico{width:14px;height:14px;color:transparent}
 .pc-upsell__card.is-on .pc-extra__check .ico{color:#0a0f00}
@@ -200,12 +239,15 @@
 
 /* ——— Примерный FPS готовой сборки ——— */
 .pc-fps{margin-top:28px;padding:20px;border-radius:24px;background:linear-gradient(160deg,rgba(34,211,238,.07),rgba(255,255,255,.02));border:1px solid rgba(34,211,238,.24);box-shadow:var(--card-shadow)}
-.pc-fps__head{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px}
+.pc-fps__head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 14px}
+.pc-fps__res{align-self:center}
 .pc-fps__head>div:nth-child(2){flex:1 1 200px;min-width:0}
 .pc-fps__badge{display:flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border-radius:13px;background:linear-gradient(160deg,rgba(34,211,238,.2),rgba(34,211,238,.04))}
 .pc-fps__badge .ico{width:26px;height:26px;color:var(--cyan)}
 .pc-fps h2{font:700 clamp(18px,4.4vw,22px)/1.2 var(--font-h);letter-spacing:-.015em}
-.pc-fps__sub{margin-top:3px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.pc-fps__sub{margin-top:4px;font-size:13px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.pc-fps__sub b{color:var(--text);font-weight:600}
+.pc-fps__sub small{display:block;margin-top:2px;font-size:11.5px;opacity:.85}
 .pc-fps__res{display:flex;gap:6px}
 .pc-fps__res .pc-chip{min-height:36px;padding:0 14px;font-size:12.5px}
 .pc-fps__list{margin-top:16px;display:grid;gap:4px}
@@ -214,10 +256,11 @@
 .pc-fps__game b{display:block;font-size:14px;font-weight:600}
 .pc-fps__game small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted)}
 .pc-fps__num{grid-area:num;align-self:center;text-align:right;white-space:nowrap}
-.pc-fps__num b{font:800 20px/1 var(--font-h);color:var(--lvl,var(--text))}
+.pc-fps__num b{display:inline-block;font:800 20px/1 var(--font-h);color:var(--lvl,var(--text));animation:num-roll .6s var(--ease) backwards;animation-delay:calc(var(--i,0) * 45ms)}
+@keyframes num-roll{from{opacity:0;transform:translateY(60%);filter:blur(3px)}}
 .pc-fps__num small{margin-left:4px;font-size:11px;color:var(--muted)}
 .pc-fps__bar{grid-area:bar;height:6px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
-.pc-fps__bar i{display:block;height:100%;width:var(--w);border-radius:inherit;background:var(--lvl);box-shadow:0 0 12px var(--lvl);transform-origin:0 50%;animation:fps-grow .9s var(--ease) backwards}
+.pc-fps__bar i{display:block;height:100%;width:var(--w);border-radius:inherit;background:var(--lvl);box-shadow:0 0 12px var(--lvl);transform-origin:0 50%;animation:fps-grow .9s var(--ease) backwards;animation-delay:calc(var(--i,0) * 45ms)}
 .pc-fps__list li.lvl-4{--lvl:var(--lime)}
 .pc-fps__list li.lvl-3{--lvl:#4ade80}
 .pc-fps__list li.lvl-2{--lvl:#facc15}
@@ -250,9 +293,15 @@ html.has-dialog{overflow:hidden}
 .pc-extra.is-on{border-color:rgba(185,255,1,.6);background:rgba(185,255,1,.1)}
 .pc-extras__actions{display:grid;gap:8px;margin-top:18px}
 .pc-extras__add{width:100%}
-.pc-extras__add:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+/* пока ничего не отмечено — кнопка не «грязно-зелёная», а спокойная пунктирная */
+.pc-extras__add:disabled{background:rgba(185,255,1,.04);color:rgba(234,255,176,.6);box-shadow:inset 0 0 0 1px rgba(185,255,1,.28);cursor:default;transform:none;filter:none}
+.pc-extras__add{transition:transform .32s var(--spring),box-shadow .32s var(--spring),filter .2s,background .3s,color .3s}
 .pc-extras__skip{width:100%}
 .pc-extras[open] .pc-extras__box{animation:extras-in .55s var(--ease) backwards}
+.pc-extras[open] .pc-extras__badge{animation:mark-pop .7s .2s var(--spring) backwards}
+.pc-extras__badge{position:relative}
+.pc-extras[open] .pc-extras__badge::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--lime);animation:ring-out 1.1s .35s var(--ease) both}
+.pc-extras[open] .pc-extra{animation:opt-in .5s var(--ease) backwards;animation-delay:calc(var(--i,0) * 60ms + .25s)}
 .pc-extras[open]::backdrop{animation:extras-fade .35s ease backwards}
 @keyframes extras-in{from{opacity:0;transform:translateY(26px) scale(.96)}}
 @keyframes extras-fade{from{opacity:0}}
@@ -267,6 +316,9 @@ html.has-dialog{overflow:hidden}
 
 /* ——— Вкладка ИИ ——— */
 .pc-ai{padding:8px 16px 60px}
+.pc-ai__chat .chat__who small.soon{display:inline-flex;margin-top:3px;color:#03222a}
+.pc-ai__ideas{padding:2px 0 0 36px}
+.pc-ai__ideas .chip{min-height:40px;padding:0 14px;font-size:13.5px}
 .pc-ai__chat{position:relative;height:clamp(420px,68dvh,620px);margin:0 auto;max-width:720px;border-radius:26px;background:var(--panel);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--line);display:flex;flex-direction:column;box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
 
 /* ——— Планшет / десктоп ——— */
@@ -284,7 +336,6 @@ html.has-dialog{overflow:hidden}
   .pc-upsell__grid{grid-template-columns:repeat(2,1fr)}
 }
 @media (hover:hover) and (pointer:fine){
-  .pc-tab:hover{border-color:rgba(185,255,1,.4);color:var(--text);transform:translateY(-1px)}
   .pc-step__head:hover{background:rgba(255,255,255,.02)}
   .pc-option:hover{border-color:rgba(185,255,1,.4);background:rgba(255,255,255,.045)}
   .pc-upsell__card:hover{border-color:rgba(185,255,1,.4);transform:translateY(-4px);box-shadow:var(--card-shadow-hover),0 0 30px -16px rgba(185,255,1,.5)}
@@ -330,4 +381,79 @@ html.has-dialog{overflow:hidden}
   .sr.in,.pc-step.is-opening .pc-options>*,.pc-summary.sr.in::before,.pc-summary.sr.in::after,.pc-upsell__card.in::after,.pc-summary__rows li.is-new,.pc-summary__total strong.is-bump{animation:none}
   .pc-summary.sr.in::after,.pc-upsell__card.in::after{display:none}
   .pc-summary.sr:not(.in)::before{transform:none}
+}
+
+/* ——— Доработки дизайна (аудит 29.09.2026) ——— */
+/* Апсейл на телефоне: компактные строки вместо высоких пустых карточек */
+@media (max-width:639.98px){
+  .pc-upsell__grid{gap:10px}
+  .pc-upsell__card{flex-direction:row;align-items:center;gap:14px;padding:14px 16px}
+  .pc-upsell__card .pc-upsell__icowrap{flex:none;margin:0}
+  .pc-upsell__card .pc-extra__txt{flex:1;min-width:0}
+  .pc-upsell__card .pc-extra__check{position:static}
+  .pc-upsell__card small{margin-top:3px}
+}
+.pc-upsell__card .pc-extra__txt b{display:block}
+.pc-upsell__card.is-on .pc-upsell__icowrap{background:linear-gradient(160deg,rgba(185,255,1,.3),rgba(185,255,1,.08));box-shadow:0 0 22px -8px rgba(185,255,1,.8)}
+.pc-upsell__icowrap{transition:background .3s,box-shadow .3s,transform .45s var(--spring)}
+
+/* Закреплённая полоска прогресса сборки (телефон/планшет) */
+.pc-bar{position:fixed;z-index:25;left:calc(10px + var(--sal));right:calc(10px + var(--sar));bottom:calc(10px + var(--sab));display:flex;align-items:center;gap:12px;padding:8px 8px 8px 10px;border-radius:20px;background:rgba(16,18,27,.86);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(185,255,1,.28);box-shadow:0 18px 40px -12px rgba(0,0,0,.85),0 0 40px -20px rgba(185,255,1,.6);transform:translateY(calc(100% + 24px));opacity:0;visibility:hidden;transition:transform .5s var(--spring),opacity .3s,visibility 0s .5s}
+.pc-bar.is-on{transform:none;opacity:1;visibility:visible;transition:transform .5s var(--spring),opacity .3s}
+.pc-bar__ring{position:relative;flex:none;width:42px;height:42px}
+.pc-bar__ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.pc-bar__ring circle{fill:none;stroke-width:3.5}
+.pc-bar__track{stroke:rgba(255,255,255,.1)}
+.pc-bar__fill{stroke:var(--lime);stroke-linecap:round;stroke-dasharray:0 100;filter:drop-shadow(0 0 4px rgba(185,255,1,.7));transition:stroke-dasharray .7s var(--spring)}
+.pc-bar__ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 14px/1 var(--font-h);color:var(--text)}
+.pc-bar.is-done .pc-bar__ring b{color:var(--lime)}
+.pc-bar.is-bump .pc-bar__ring{animation:mark-pop .55s var(--spring)}
+.pc-bar__txt{flex:1;min-width:0;line-height:1.25}
+.pc-bar__txt b{display:block;font:700 13.5px/1.2 var(--font-h)}
+.pc-bar__txt small{display:block;margin-top:2px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-bar.is-done .pc-bar__txt small{color:var(--lime)}
+.pc-bar__go{flex:none;min-height:42px;padding:8px 16px;--depth:4px;font-size:14px}
+@media (min-width:900px){.pc-bar{display:none}}
+.pc-body.has-bar .toast{bottom:calc(84px + var(--sab))}
+/* на компьютере у конструктора нет закреплённой кнопки — тост по центру снизу, не поверх сводки */
+@media (min-width:768px) and (min-height:521px){
+  .pc-body .toast{left:50%;right:auto;bottom:calc(24px + var(--sab));transform:translate(-50%,14px)}
+  .pc-body .toast.is-on{transform:translate(-50%,0)}
+}
+@media (min-width:768px) and (max-width:899.98px) and (min-height:521px){
+  .pc-body.has-bar .toast{bottom:calc(88px + var(--sab))}
+  .pc-bar{left:50%;right:auto;width:min(560px,100% - 32px);translate:-50% 0}
+}
+
+@media (hover:hover) and (pointer:fine){
+  .pc-back:hover{color:var(--text)}
+  .pc-back:hover .ico{transform:translateX(-3px)}
+  .pc-tab:not(.is-active):hover{color:var(--text)}
+  .pc-step__head:hover .pc-step__chev{color:var(--text)}
+  .pc-step__head:hover .pc-step__ico{border-color:rgba(185,255,1,.35)}
+  .pc-upsell__card:hover .pc-upsell__icowrap,.pc-extra:hover .pc-upsell__icowrap{transform:translateY(-2px) rotate(-4deg)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .is-entering,.pc-step.is-just-done .pc-step__mark,.pc-step.is-just-done .pc-step__ico::after,.compat__head.is-pulse .compat__badge,
+  .compat__head.is-pulse .compat__badge::after,.compat__head.is-pulse #compatText,.pc-progress__bar i::after,.pc-fps__num b,
+  .pc-extras[open] .pc-extras__badge,.pc-extras[open] .pc-extras__badge::after,.pc-extras[open] .pc-extra,.pc-bar.is-bump .pc-bar__ring{animation:none}
+  .pc-tabs__glider,.pc-bar,.pc-progress__bar i,.pc-bar__fill,.pc-extra__check .ico{transition:none}
+  .pc-step.is-just-done .pc-step__ico::after,.compat__head.is-pulse .compat__badge::after,.pc-extras[open] .pc-extras__badge::after{display:none}
+}
+
+/* ——— «Актуально сейчас»: три современные детали разного уровня над общим списком (configurator/picks.js) ——— */
+.pc-picks{display:grid;gap:8px;padding:12px;border-radius:18px;background:linear-gradient(160deg,rgba(185,255,1,.07),rgba(34,211,238,.03));border:1px solid rgba(185,255,1,.22)}
+.pc-picks__head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0 2px 2px;font:700 13px/1.2 var(--font-h);color:var(--text)}
+.pc-picks__head .ico{width:16px;height:16px;color:var(--lime)}
+.pc-picks__head small{font:500 11.5px/1.2 var(--font-b);color:var(--muted)}
+.pc-picks .pc-option{background:rgba(7,8,13,.45)}
+.pc-pick__tag{display:inline-flex;align-items:center;margin-bottom:5px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.02em;color:#03222a;background:var(--cyan)}
+.pc-option--pick.lvl-1 .pc-pick__tag{background:var(--lime);color:#0a0f00}
+.pc-option--pick.lvl-2 .pc-pick__tag{background:linear-gradient(90deg,var(--lime),var(--cyan));color:#0a0f00;box-shadow:0 0 14px -4px rgba(185,255,1,.7)}
+.pc-picks__all{margin:6px 2px 0;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+@media (max-width:639.98px){
+  .pc-picks{padding:10px 8px;margin:0 -4px}
+  .pc-picks .pc-option{padding:11px 12px}
+  .pc-picks .pc-option__ico{display:none}
 }

@@ -4,6 +4,7 @@ import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt } 
 import { splitPrice, INSTALLMENT_MONTHS, CREDIT_ANNUAL_RATE } from "./installment.js";
 import { UPSELL } from "./upsell.js";
 import { estimateFps, fpsLevel, RESOLUTIONS } from "./fps.js";
+import { topPicks, byFreshness } from "./picks.js";
 import { sourceLine, telegramUrl } from "../js/engine.js";
 import { createScene } from "./scene.js";
 
@@ -90,12 +91,23 @@ const scene = new SceneProxy($("#scene"));
 // ——— вкладки «Собрать самому» / «Подбор с ИИ» ———
 const tabs = { build: $("#tab-build"), ai: $("#tab-ai") };
 const panels = { build: $("#build"), ai: $("#ai") };
+const tabList = $(".pc-tabs");
 function selectTab(name) {
+  if (tabList.dataset.active === name) return;
+  tabList.dataset.active = name; // по нему «пилюля» подсветки переезжает под активную вкладку (css)
   for (const k of Object.keys(tabs)) {
     tabs[k].classList.toggle("is-active", k === name);
     tabs[k].setAttribute("aria-selected", String(k === name));
     panels[k].hidden = k !== name;
   }
+  // открытая панель мягко проявляется (перезапуск CSS-анимации)
+  const p = panels[name];
+  p.classList.remove("is-entering");
+  if (motionOK) {
+    void p.offsetWidth;
+    p.classList.add("is-entering");
+  }
+  syncBar();
 }
 tabs.build.addEventListener("click", () => selectTab("build"));
 tabs.ai.addEventListener("click", () => selectTab("ai"));
@@ -126,7 +138,7 @@ const FACETS = {
 /** Короткая строка характеристик под названием варианта */
 function specLine(step, p) {
   const bits = {
-    cpu: [p.socket, p.cores && `${p.cores} ядер`, p.tdp && `${p.tdp} Вт`, p.igpu === false ? "без графики" : "есть графика", p.boxCooler && "кулер в комплекте"],
+    cpu: [p.socket, p.cores && `${p.cores} ${coresWord(p.cores)}`, p.tdp && `${p.tdp} Вт`, p.igpu === false ? "без графики" : "есть графика", p.boxCooler && "кулер в комплекте"],
     motherboard: [p.chipset, FORM_LABEL[p.form], p.mem && `${p.slots || ""}×${p.mem}`.replace(/^×/, ""), p.m2 ? `${p.m2}×M.2` : null],
     ram: [p.mem, p.cap && (p.sticks > 1 ? `${gb(p.cap)} (${p.sticks}×${gb(p.cap / p.sticks)})` : gb(p.cap)), p.mhz && `${p.mhz} МГц`, p.rgb && "подсветка"],
     gpu: [p.vram && `${p.vram} ГБ`, p.len && `длина ${p.len} мм`, p.psuRec && `БП от ${p.psuRec} Вт`],
@@ -137,6 +149,14 @@ function specLine(step, p) {
     cooler: [p.type === "aio" ? (p.rad ? `водяное охлаждение ${p.rad} мм` : "водяное охлаждение") : p.towers > 1 ? "двухбашенный" : p.lowProfile ? "низкопрофильный" : "башенный", p.tdp && `до ${p.tdp} Вт`, p.type !== "aio" && p.height && `высота ${p.height} мм`],
   }[step];
   return (bits || []).filter(Boolean).join(" · ");
+}
+
+function coresWord(n) {
+  const m = n % 10;
+  const t = n % 100;
+  if (m === 1 && t !== 11) return "ядро";
+  if (m >= 2 && m <= 4 && (t < 12 || t > 14)) return "ядра";
+  return "ядер";
 }
 
 function partMeta(step, part) {
@@ -197,11 +217,11 @@ function facetRows(step, parts) {
   return rows;
 }
 
-function optionButton(s, p) {
-  const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : ""));
+function optionButton(s, p, pick) {
+  const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : "") + (pick ? ` pc-option--pick lvl-${pick.tier}` : ""));
   opt.type = "button";
   opt.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg></span>
-    <span class="pc-option__mid"><span class="pc-option__name"></span><span class="pc-option__spec"></span><span class="pc-option__meta">${partMeta(s.key, p)}</span></span>
+    <span class="pc-option__mid">${pick ? `<span class="pc-pick__tag">${pick.name}</span>` : ""}<span class="pc-option__name"></span><span class="pc-option__spec"></span><span class="pc-option__meta">${partMeta(s.key, p)}</span></span>
     ${tierDots(s.key, p)}
     <span class="pc-option__check"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg></span>`;
   opt.querySelector(".pc-option__name").textContent = p.name;
@@ -219,7 +239,8 @@ function renderStepBody(s) {
     inner.appendChild(el("p", "pc-empty", "Загружаем каталог комплектующих…"));
     return body;
   }
-  const all = filterOptions(s.key, sel);
+  // сверху — актуальные детали (сортировка по «свежести», см. picks.js), внутри — прежний порядок каталога
+  const all = byFreshness(s.key, filterOptions(s.key, sel));
   const hiddenCount = CATALOG[s.key].length - all.length;
   const v = view[s.key];
 
@@ -255,18 +276,27 @@ function renderStepBody(s) {
       none.addEventListener("click", () => choose(s.key, null));
       items.push(none);
     }
-    // выбранный вариант держим первым, даже если он дальше первой страницы
-    const selected = shown.find((p) => p.id === sel[s.key]);
-    const page = shown.filter((p) => p !== selected).slice(0, v.limit - (selected ? 1 : 0));
+    // «Актуально сейчас»: по одной современной детали трёх уровней (с учётом чипов-фильтров; при поиске — не показываем)
+    const picks = !v.q ? topPicks(s.key, shown) : [];
+    if (picks.length) {
+      const box = el("div", "pc-picks", `<p class="pc-picks__head"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>Актуально сейчас<small>современные модели разного уровня</small></p>`);
+      picks.forEach((pk) => box.appendChild(optionButton(s, pk.part, pk)));
+      items.push(box);
+    }
+    const rest = picks.length ? shown.filter((p) => !picks.some((pk) => pk.part === p)) : shown;
+    // выбранный вариант держим первым, даже если он дальше первой страницы (если он не в подборке выше)
+    const selected = rest.find((p) => p.id === sel[s.key]);
+    const page = rest.filter((p) => p !== selected).slice(0, v.limit - (selected ? 1 : 0));
+    if (picks.length && rest.length) items.push(el("p", "pc-picks__all", `Все варианты · ${rest.length}`));
     if (selected) items.push(optionButton(s, selected));
     page.forEach((p) => items.push(optionButton(s, p)));
     items.forEach((n, i) => n.style.setProperty("--oi", Math.min(i, 10)));
     list.replaceChildren(...items);
 
     foot.replaceChildren();
-    const rest = shown.length - Math.min(shown.length, v.limit);
-    if (rest > 0) {
-      const more = el("button", "ghost pc-more", `Показать ещё ${Math.min(rest, PAGE)} <small>· осталось ${rest}</small>`);
+    const left = rest.length - Math.min(rest.length, v.limit);
+    if (left > 0) {
+      const more = el("button", "ghost pc-more", `Показать ещё ${Math.min(left, PAGE)} <small>· осталось ${left}</small>`);
       more.type = "button";
       more.addEventListener("click", () => {
         v.limit += PAGE;
@@ -287,17 +317,18 @@ function renderStepBody(s) {
 }
 
 let justOpened = null;
+let justDone = null; // шаг, который только что заполнили: у его отметки — короткая анимация «галочка встала»
 function renderSteps() {
-  STEPS.forEach((s) => {
-    const wrap = el("div", "pc-step" + (openStep === s.key ? " is-open" : "") + (justOpened === s.key && motionOK ? " is-opening" : ""));
+  STEPS.forEach((s, i) => {
+    const wrap = el("div", "pc-step" + (openStep === s.key ? " is-open" : "") + (justOpened === s.key && motionOK ? " is-opening" : "") + (justDone === s.key && motionOK ? " is-just-done" : ""));
     wrap.dataset.step = s.key;
     const head = el(
       "button",
       "pc-step__head",
-      `<span class="pc-step__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg></span>
+      `<span class="pc-step__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg><span class="pc-step__mark" aria-hidden="true"><i>${i + 1}</i><svg class="ico"><use href="#i-check"/></svg></span></span>
        <span class="pc-step__title"><b>${s.title}</b><span data-role="subtitle"></span></span>
        <span class="pc-step__badge" data-role="badge"></span>
-       <svg class="ico pc-step__chev" aria-hidden="true"><use href="#i-down"/></svg>`,
+       <svg class="ico pc-step__chev" aria-hidden="true"><use href="#i-chev"/></svg>`,
     );
     head.type = "button";
     head.setAttribute("aria-expanded", String(openStep === s.key));
@@ -316,6 +347,7 @@ function renderSteps() {
   });
   stepsEl.replaceChildren(...STEPS.map((s) => stepEls[s.key]));
   justOpened = null;
+  justDone = null;
   syncStepTexts();
 }
 
@@ -342,6 +374,7 @@ function syncStepTexts() {
 const tierWord = (step, part) => ({ 1: "Начальный", 2: "Средний", 3: "Топ" })[priceTier(step, part)] || "";
 
 function choose(step, id) {
+  if (sel[step] !== id || !touched[step]) justDone = step;
   sel[step] = id;
   touched[step] = true;
   scene.set(step, findPart(step, id));
@@ -397,10 +430,19 @@ function reconcile(justChosen) {
 const compatHead = $("#compatHead");
 const compatText = $("#compatText");
 const compatList = $("#compatList");
+let compatState = null;
 function renderCompat() {
   const r = checkCompat(sel);
   const hasAny = Object.values(sel).some(Boolean);
-  compatHead.className = "compat__head " + (!hasAny ? "is-ok" : r.issues.some((i) => i.level === "error") ? "is-error" : r.issues.length ? "is-warning" : "is-ok");
+  const state = !hasAny ? "is-ok" : r.issues.some((i) => i.level === "error") ? "is-error" : r.issues.length ? "is-warning" : "is-ok";
+  const pulse = motionOK && hasAny && `${state}:${r.issues.length}` !== compatState;
+  compatState = hasAny ? `${state}:${r.issues.length}` : null;
+  compatHead.className = "compat__head " + state;
+  if (pulse) {
+    // статус изменился — значок коротко «отзывается» кольцом
+    void compatHead.offsetWidth;
+    compatHead.classList.add("is-pulse");
+  }
   const iconId = compatHead.classList.contains("is-ok") ? "check" : "warn";
   compatHead.querySelector("use").setAttribute("href", `#i-${iconId}`);
   compatText.textContent = !hasAny ? "Выбирайте детали — конструктор сам покажет только совместимые" : r.issues.length === 0 ? "Все выбранные детали совместимы" : "Обнаружены несостыковки — проверьте отмеченные шаги";
@@ -485,6 +527,8 @@ function renderSummary() {
       }),
     ...(extras.size ? [extrasRow()] : []),
   );
+  summaryEmpty.hidden = t.parts.length > 0 || extras.size > 0;
+  renderProgress();
   totalEl.textContent = !t.parts.length ? "0 BYN" : t.priced ? `${t.total} BYN` : "По запросу";
   totalEl.classList.toggle("is-ask", t.parts.length > 0 && !t.priced);
   totalNote.hidden = !(t.parts.length > 0 && !t.priced);
@@ -518,6 +562,46 @@ function renderSummary() {
   renderFps(requiredFilled);
 }
 const isComplete = () => STEPS.filter((s) => isRequired(s.key, sel)).every((s) => sel[s.key]);
+
+// ——— прогресс сборки: полоска в «Ваша сборка» и закреплённая полоска внизу экрана на телефоне ———
+const progressBox = $("#progress");
+const progressText = $("#progressText");
+const progressCount = $("#progressCount");
+const progressFill = $("#progressFill");
+const summaryEmpty = $("#summaryEmpty");
+const bar = $("#buildBar");
+const barFill = $("#barFill");
+const barCount = $("#barCount");
+const barText = $("#barText");
+let progressShown = null;
+function progress() {
+  const req = STEPS.filter((s) => isRequired(s.key, sel));
+  const done = req.filter((s) => sel[s.key]).length;
+  const next = req.find((s) => !sel[s.key]);
+  const low = (t) => t[0].toLowerCase() + t.slice(1);
+  const text = !done ? `Первый шаг — ${low(next.title)}` : next ? `Дальше — ${low(next.title)}` : "Сборка готова — можно отправлять";
+  return { done, total: req.length, next, text };
+}
+function renderProgress() {
+  const p = progress();
+  const pct = Math.round((p.done / p.total) * 100);
+  progressText.textContent = p.text;
+  progressCount.textContent = `${p.done} из ${p.total}`;
+  progressFill.style.width = `${pct}%`;
+  progressBox.classList.toggle("is-done", !p.next);
+  barFill.style.strokeDasharray = `${pct} 100`;
+  barCount.textContent = p.done;
+  barText.textContent = p.text;
+  bar.classList.toggle("is-done", !p.next);
+  const key = `${p.done}/${p.total}`;
+  if (motionOK && progressShown !== null && key !== progressShown) {
+    bar.classList.remove("is-bump");
+    void bar.offsetWidth;
+    bar.classList.add("is-bump");
+  }
+  progressShown = key;
+  syncBar();
+}
 const extraList = (field) => UPSELL.filter((u) => extras.has(u.id)).map((u) => u[field]).join(", ");
 function extrasRow() {
   const li = el("li", "is-name is-extra", `<span class="k">Дополнительно подобрать</span><span class="v v--name"></span>`);
@@ -543,12 +627,18 @@ RESOLUTIONS.forEach((r) => {
   fpsResEl.appendChild(b);
 });
 let fpsShown = false;
+let fpsKey = null;
 function renderFps(complete) {
   fpsBox.hidden = !complete;
   if (!complete) {
     fpsShown = false;
+    fpsKey = null;
     return;
   }
+  // перерисовываем, только если сменилась видеокарта или разрешение (иначе полоски «перезапускались» бы от любого клика)
+  const key = `${sel.gpu}:${fpsRes}`;
+  if (key === fpsKey) return;
+  fpsKey = key;
   if (!fpsShown) {
     fpsShown = true;
     sr(fpsBox, "card");
@@ -560,7 +650,10 @@ function renderFps(complete) {
     b.setAttribute("aria-pressed", String(i === fpsRes));
   });
   fpsResEl.hidden = !rows;
-  fpsSub.textContent = gpu ? `С видеокартой ${gpu.name} · под названием игры — настройки графики` : "Сборка без видеокарты";
+  if (gpu) {
+    fpsSub.replaceChildren("С видеокартой ", el("b", "", ""), el("small", "", "Под названием игры — настройки графики"));
+    fpsSub.querySelector("b").textContent = gpu.name;
+  } else fpsSub.textContent = "Сборка без видеокарты";
   fpsNote.textContent = !gpu
     ? "Без видеокарты FPS в играх не оцениваем: встроенной графики хватит для учёбы, работы и нетребовательных игр. Для современных игр добавьте видеокарту."
     : !rows
@@ -569,9 +662,10 @@ function renderFps(complete) {
         ? `Это профессиональная видеокарта — она рассчитана на работу, а не на игры. ${fpsNoteText}`
         : fpsNoteText;
   fpsList.replaceChildren(
-    ...(rows || []).map((g) => {
+    ...(rows || []).map((g, i) => {
       const { level, label } = fpsLevel(g.fps);
       const li = el("li", `lvl-${level}`);
+      li.style.setProperty("--i", i);
       li.innerHTML = `<span class="pc-fps__game"><b></b><small></small></span><span class="pc-fps__bar" aria-hidden="true"><i></i></span><span class="pc-fps__num"><b></b><small>FPS</small></span>`;
       li.querySelector(".pc-fps__game b").textContent = g.name;
       li.querySelector(".pc-fps__game small").textContent = `${g.preset[0].toUpperCase()}${g.preset.slice(1)} · ${label}`;
@@ -599,13 +693,22 @@ function extraToggle(u, on, onClick, cls) {
 }
 function renderExtrasGrid() {
   extrasGrid.replaceChildren(
-    ...UPSELL.map((u) =>
-      extraToggle(u, pending.has(u.id), () => {
-        pending.has(u.id) ? pending.delete(u.id) : pending.add(u.id);
-        renderExtrasGrid();
-      }, "pc-extra"),
-    ),
+    ...UPSELL.map((u, i) => {
+      const b = extraToggle(u, pending.has(u.id), () => {
+        // переключаем на месте, без перерисовки — чтобы галочка «вставала» анимацией (css transition)
+        const on = !pending.has(u.id);
+        on ? pending.add(u.id) : pending.delete(u.id);
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-pressed", String(on));
+        syncExtrasAdd();
+      }, "pc-extra");
+      b.style.setProperty("--i", i);
+      return b;
+    }),
   );
+  syncExtrasAdd();
+}
+function syncExtrasAdd() {
   extrasAdd.disabled = pending.size === 0;
   extrasAdd.textContent = pending.size ? `Добавить к сборке (${pending.size})` : "Отметьте, что добавить";
 }
@@ -689,11 +792,31 @@ function toast(text) {
 const aiForm = $("#aiForm");
 const aiInput = $("#aiInput");
 const aiLog = $("#aiLog");
+const aiPh = $("#aiPh");
+const syncAiPh = () => aiPh.classList.toggle("is-hidden", aiInput.value.length > 0);
+aiInput.addEventListener("input", syncAiPh);
+// Enter — отправить, Shift+Enter — новая строка (как в чате на главной)
+aiInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    aiForm.requestSubmit();
+  }
+});
+// примеры запросов: подставляют текст в поле, дальше клиент может дописать
+$("#aiIdeas").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  aiInput.value = chip.textContent;
+  syncAiPh();
+  aiInput.focus();
+});
 aiForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = aiInput.value.trim();
   if (!text) return;
   aiInput.value = "";
+  syncAiPh();
+  $("#aiIdeas")?.remove();
   aiLog.appendChild(el("div", "msg msg--user", `<span class="bubble"></span>`)).querySelector(".bubble").textContent = text;
   aiLog.scrollTo({ top: aiLog.scrollHeight, behavior: "smooth" });
   await new Promise((r) => setTimeout(r, 500));
@@ -719,6 +842,27 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
 } else {
   document.querySelectorAll(".reveal").forEach((n) => n.classList.add("in"));
 }
+
+// Закреплённая полоска прогресса (только телефон/планшет, см. css): видна, пока клиент листает шаги,
+// и прячется, когда «Ваша сборка» уже на экране или открыта вкладка ИИ.
+const summaryEl = $("#summary");
+const barVis = { steps: false, summary: false };
+function syncBar() {
+  const on = barVis.steps && !barVis.summary && !panels.build.hidden && Object.values(sel).some(Boolean);
+  bar.classList.toggle("is-on", on);
+  document.body.classList.toggle("has-bar", on);
+}
+if ("IntersectionObserver" in window) {
+  new IntersectionObserver((es) => {
+    es.forEach((e) => (barVis.steps = e.isIntersecting));
+    syncBar();
+  }).observe(stepsEl);
+  new IntersectionObserver((es) => {
+    es.forEach((e) => (barVis.summary = e.isIntersecting));
+    syncBar();
+  }, { rootMargin: "0px 0px -35% 0px" }).observe(summaryEl);
+}
+$("#barGo").addEventListener("click", () => summaryEl.scrollIntoView({ behavior: motionOK ? "smooth" : "auto", block: "start" }));
 
 renderSteps();
 renderCompat();

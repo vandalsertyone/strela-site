@@ -50,9 +50,10 @@ function cardEl(cat) {
   }
   return b;
 }
-CATEGORIES.forEach((c) => {
-  strip.appendChild(cardEl(c));
-  cats.appendChild(cardEl(c));
+CATEGORIES.forEach((c, i) => {
+  // --i: карточки выходят лесенкой при загрузке (css: card-in)
+  strip.appendChild(cardEl(c)).style.setProperty("--i", i);
+  cats.appendChild(cardEl(c)).style.setProperty("--i", i);
 });
 
 // ——— Telegram: копируем текст (запасной вариант) и показываем тост ———

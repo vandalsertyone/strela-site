@@ -45,6 +45,14 @@ ul,ol{padding:0;list-style:none}
 :focus-visible{outline:2px solid var(--lime);outline-offset:3px;border-radius:8px}
 .skip{position:absolute}
 .accent{color:var(--lime)}
+/* блик пробегает по акцентной части заголовка — раз в несколько секунд, текст виден сразу (на LCP не влияет) */
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  h1 .accent{background:linear-gradient(100deg,var(--lime) 0 40%,#f4ffcf 50%,var(--lime) 60% 100%) 100% 0/250% 100% no-repeat;-webkit-background-clip:text;background-clip:text;color:transparent;animation:accent-sheen 8s 1.6s ease-in-out infinite}
+}
+@keyframes accent-sheen{0%{background-position:100% 0}20%,100%{background-position:0 0}}
+/* свечение за курсором на карточках секций (js/effects.js ставит .spot и --sx/--sy) */
+.spot::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:radial-gradient(260px circle at var(--sx,50%) var(--sy,0),rgba(185,255,1,.11),transparent 65%);opacity:0;transition:opacity .35s;pointer-events:none}
+.spot:hover::after{opacity:1}
 .container{width:min(1180px,100% - 32px - var(--sal) - var(--sar));margin-inline:auto}
 
 /* ——— Фон ——— */
@@ -88,7 +96,7 @@ ul,ol{padding:0;list-style:none}
 .hero{flex:none;padding:0 calc(18px + var(--sar)) 4px calc(18px + var(--sal));display:grid;grid-template-rows:1fr;transition:grid-template-rows .6s var(--ease),opacity .5s,margin .6s var(--ease)}
 .hero__inner{overflow:hidden;min-height:0}
 .hero h1{font:700 clamp(26px,8.2vw,34px)/1.08 var(--font-h);letter-spacing:-.02em;text-wrap:balance}
-.lead{margin-top:10px;font-size:14px;line-height:1.45;color:var(--muted);max-width:52ch}
+.lead{margin-top:10px;font-size:14px;line-height:1.45;color:var(--muted);max-width:52ch;text-wrap:pretty}
 /* Диалог начался — заголовок уезжает, чату больше места */
 .is-chatting .hero{grid-template-rows:0fr;opacity:0;padding-bottom:0}
 
@@ -182,6 +190,11 @@ ul,ol{padding:0;list-style:none}
 .card.is-active{box-shadow:inset 0 0 0 1px rgba(185,255,1,.55),0 0 40px -12px rgba(185,255,1,.5)}
 .card.is-active::before{opacity:1}
 .cats{display:none}
+/* первый экран: окно чата и карточки категорий выходят при загрузке (только transform/opacity — без сдвига вёрстки) */
+.stage .chat{animation:chat-in .9s .1s var(--ease) backwards}
+.cats .card,.strip .card{animation:card-in .8s var(--ease) backwards;animation-delay:calc(.35s + var(--i,0) * 80ms)}
+@keyframes chat-in{from{opacity:0;transform:translateY(22px) scale(.985)}}
+@keyframes card-in{from{opacity:0;transform:translateY(24px) scale(.97)}}
 
 .chat__note{flex:none;padding:0 16px calc(10px + 0px);text-align:center;font-size:11.5px;line-height:1.35;color:var(--muted)}
 .composer{flex:none;display:flex;align-items:flex-end;gap:8px;padding:8px 10px 6px}
@@ -201,28 +214,37 @@ ul,ol{padding:0;list-style:none}
 .js .reveal.in{opacity:1;transform:none}
 
 .steps{display:grid;gap:14px;margin-top:36px;counter-reset:s}
-.step{position:relative;padding:22px 22px 22px 84px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid var(--line)}
-.step__n{position:absolute;left:20px;top:14px;font:800 52px/1 var(--font-h);color:transparent;-webkit-text-stroke:1.5px rgba(185,255,1,.75);letter-spacing:-.04em}
+.step{position:relative;padding:22px 22px 22px 84px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid var(--line);overflow:hidden;isolation:isolate}
+/* при появлении по верху карточки прорисовывается полоска, контурная цифра заливается снизу — по очереди, шаг за шагом */
+.step::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--lime),var(--cyan) 70%,transparent);transform-origin:0 50%;transition:transform 1.1s var(--ease);transition-delay:calc(var(--d,0) * 180ms + .35s)}
+.js .step:not(.in)::before{transform:scaleX(0)}
+.step__n{position:absolute;left:20px;top:14px;font:800 52px/1 var(--font-h);color:transparent;-webkit-text-stroke:1.5px rgba(185,255,1,.75);letter-spacing:-.04em;background:linear-gradient(0deg,rgba(185,255,1,.55),rgba(34,211,238,.18)) no-repeat 0 100%/100% 100%;-webkit-background-clip:text;background-clip:text;transition:background-size 1.2s var(--ease);transition-delay:calc(var(--d,0) * 180ms + .5s)}
+.js .step:not(.in) .step__n{background-size:100% 0%}
 .step h3{font:700 17px/1.25 var(--font-h);letter-spacing:-.015em}
 .step p{margin-top:6px;color:var(--muted);font-size:15px}
 
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:34px}
-.stat{padding:18px 8px;text-align:center;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.stat{position:relative;padding:18px 8px;text-align:center;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line);overflow:hidden;isolation:isolate}
 .stat__n{display:block;font:800 clamp(26px,8vw,54px)/1 var(--font-h);letter-spacing:-.04em;color:var(--lime);text-shadow:0 0 30px rgba(185,255,1,.35);font-variant-numeric:tabular-nums}
 .stat span{display:block;margin-top:8px;font-size:12px;line-height:1.3;color:var(--muted)}
 .facts{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
-.fact{padding:22px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid var(--line);transition:border-color .3s,transform .5s var(--ease)}
-.fact .ico{width:30px;height:30px;color:var(--lime);margin-bottom:14px}
+.fact{position:relative;padding:22px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid var(--line);overflow:hidden;isolation:isolate;transition:border-color .3s,transform .5s var(--ease)}
+.fact .ico{width:46px;height:46px;padding:11px;border-radius:14px;color:var(--lime);margin-bottom:16px;background:linear-gradient(160deg,rgba(185,255,1,.17),rgba(185,255,1,.03));box-shadow:inset 0 0 0 1px rgba(185,255,1,.18);transition:transform .5s var(--spring),box-shadow .3s}
 .fact h3{font:700 16.5px/1.25 var(--font-h);letter-spacing:-.015em}
 .fact p{margin-top:8px;font-size:14.5px;color:var(--muted)}
-.cta{display:flex;flex-direction:column;align-items:flex-start;gap:18px;margin-top:44px;padding:26px 22px;border-radius:26px;background:radial-gradient(120% 140% at 0% 0%,rgba(185,255,1,.16),transparent 55%),rgba(255,255,255,.03);border:1px solid rgba(185,255,1,.28)}
+.cta{position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;align-items:flex-start;gap:18px;margin-top:44px;padding:26px 22px;border-radius:26px;background:radial-gradient(120% 140% at 0% 0%,rgba(185,255,1,.16),transparent 55%),rgba(255,255,255,.03);border:1px solid rgba(185,255,1,.28)}
+/* переливающаяся рамка (как у карточек категорий) и блик при появлении */
+.cta::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;background:conic-gradient(from var(--angle),rgba(185,255,1,.9),rgba(34,211,238,.7),rgba(74,99,255,.5),rgba(185,255,1,.9));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.6;animation:spin 10s linear infinite;pointer-events:none}
+.cta.in::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(105deg,transparent 38%,rgba(185,255,1,.12) 50%,transparent 62%);transform:translateX(-110%);animation:cta-sheen 1.8s .5s var(--ease) forwards}
+@keyframes cta-sheen{to{transform:translateX(110%)}}
 .cta p{font:700 clamp(18px,5vw,26px)/1.25 var(--font-h);letter-spacing:-.02em;max-width:26ch}
 
 /* ——— Подвал ——— */
 .footer{padding:56px 0 calc(110px + var(--sab));border-top:1px solid var(--line);background:linear-gradient(180deg,transparent,rgba(0,0,0,.35))}
 .footer__title{font:700 20px/1.2 var(--font-h);letter-spacing:-.02em;margin-bottom:22px}
 .stores{display:grid;grid-template-columns:1fr 1fr;gap:22px 18px}
-.stores h3{font:700 14px/1.2 var(--font-h);color:var(--lime);margin-bottom:8px}
+.stores h3{display:flex;align-items:center;gap:6px;font:700 14px/1.2 var(--font-h);color:var(--lime);margin-bottom:8px}
+.stores h3 .ico{width:15px;height:15px;opacity:.85}
 .stores li{font-size:13.5px;line-height:1.4;color:var(--muted);margin-bottom:6px}
 .stores__col:last-child{grid-column:1/-1}
 .links{display:flex;flex-wrap:wrap;gap:10px;margin-top:34px}
@@ -339,6 +361,8 @@ ul,ol{padding:0;list-style:none}
   .card:hover .card__icon{transform:translateY(-4px) scale(1.06) rotate(-3deg)}
   .card:active{transform:perspective(900px) scale(.985)}
   .fact:hover{border-color:rgba(185,255,1,.35);transform:translateY(-3px)}
+  .fact:hover .ico{transform:translateY(-2px) rotate(-6deg) scale(1.06);box-shadow:inset 0 0 0 1px rgba(185,255,1,.4),0 0 24px -6px rgba(185,255,1,.6)}
+  .step:hover,.stat:hover{border-color:rgba(185,255,1,.3)}
   .chat__log::-webkit-scrollbar{width:8px}
   .chat__log::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:8px}
 }
@@ -353,6 +377,9 @@ ul,ol{padding:0;list-style:none}
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;transition-delay:0s!important}
   .blob{animation:none}
-  .card::before{animation:none}
+  .card::before,.cta::before{animation:none}
   .js .reveal{opacity:1;transform:none}
+  .js .step:not(.in)::before{transform:none}
+  .js .step:not(.in) .step__n{background-size:100% 100%}
+  .cta.in::after{display:none}
 }
