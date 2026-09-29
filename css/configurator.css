@@ -124,7 +124,11 @@
 .pc-option__spec{display:block;margin-top:3px;font-size:12px;line-height:1.35;color:var(--muted)}
 .pc-option__spec:empty,.pc-option__meta:empty{display:none}
 .tag--ok{background:rgba(185,255,1,.12);color:#c6f77a}
-.pc-summary__rows .v--name{max-width:62%;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* строка сводки с названием детали: подпись шага сверху, название — полностью, переносится по строкам */
+.pc-summary__rows li.is-name{flex-direction:column;gap:3px}
+.pc-summary__rows li.is-name .k{font-size:11.5px;letter-spacing:.01em}
+.pc-summary__rows li.is-extra .k{color:var(--lime)}
+.pc-summary__rows li.is-name .v--name{font-weight:500;color:var(--text);text-align:left;line-height:1.35;overflow-wrap:anywhere}
 .pc-summary__total strong.is-ask{font-size:22px}
 .pc-summary__note{margin-top:8px;font-size:12px;line-height:1.45;color:var(--muted)}
 @media (hover:hover) and (pointer:fine){.pc-chip:hover{border-color:rgba(185,255,1,.4);color:var(--text)}}
@@ -175,14 +179,91 @@
 
 /* Апсейл */
 .pc-upsell{margin-top:44px;text-align:center}
-.pc-upsell h2{font:700 clamp(22px,5vw,30px)/1.2 var(--font-h);letter-spacing:-.02em}
+.pc-upsell h2{text-wrap:balance;font:700 clamp(22px,5vw,30px)/1.2 var(--font-h);letter-spacing:-.02em}
 .pc-upsell__note{margin-top:8px;color:var(--muted);font-size:13.5px}
 .pc-upsell__grid{display:grid;gap:12px;margin-top:22px}
-.pc-upsell__card{padding:20px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line);box-shadow:var(--card-shadow);text-align:left;transition:border-color .3s,transform .3s var(--ease),box-shadow .3s}
+.pc-upsell__card{position:relative;display:flex;flex-direction:column;align-items:flex-start;width:100%;padding:20px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line);box-shadow:var(--card-shadow);color:var(--text);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .3s,background .3s,transform .3s var(--ease),box-shadow .3s}
+.pc-upsell__card b{font:700 15px/1.25 var(--font-h)}
+.pc-upsell__card small{display:block;margin-top:6px;font-size:13px;line-height:1.4;color:var(--muted)}
+.pc-upsell__card .pc-extra__check{position:absolute;top:16px;right:16px}
+.pc-upsell__card.is-on{border-color:rgba(185,255,1,.6);background:linear-gradient(160deg,rgba(185,255,1,.12),rgba(185,255,1,.03))}
+/* галочка-переключатель у допов (карточки и окно «Добавим к сборке?») */
+.pc-extra__check{display:flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line-2);color:transparent;transition:background .2s,border-color .2s,color .2s}
+.pc-extra__check .ico{width:14px;height:14px;color:inherit}
+.is-on>.pc-extra__check{border-color:var(--lime);background:var(--lime);color:#0a0f00}
+.pc-upsell__card .pc-extra__check .ico{width:14px;height:14px;color:transparent}
+.pc-upsell__card.is-on .pc-extra__check .ico{color:#0a0f00}
 .pc-upsell__icowrap{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:13px;background:linear-gradient(160deg,rgba(185,255,1,.16),rgba(185,255,1,.03));margin-bottom:12px}
 .pc-upsell__card .ico{width:24px;height:24px;color:var(--lime)}
 .pc-upsell__card h3{font:700 15px/1.25 var(--font-h)}
 .pc-upsell__card p{margin-top:6px;font-size:13px;color:var(--muted)}
+
+/* ——— Примерный FPS готовой сборки ——— */
+.pc-fps{margin-top:28px;padding:20px;border-radius:24px;background:linear-gradient(160deg,rgba(34,211,238,.07),rgba(255,255,255,.02));border:1px solid rgba(34,211,238,.24);box-shadow:var(--card-shadow)}
+.pc-fps__head{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px}
+.pc-fps__head>div:nth-child(2){flex:1 1 200px;min-width:0}
+.pc-fps__badge{display:flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border-radius:13px;background:linear-gradient(160deg,rgba(34,211,238,.2),rgba(34,211,238,.04))}
+.pc-fps__badge .ico{width:26px;height:26px;color:var(--cyan)}
+.pc-fps h2{font:700 clamp(18px,4.4vw,22px)/1.2 var(--font-h);letter-spacing:-.015em}
+.pc-fps__sub{margin-top:3px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.pc-fps__res{display:flex;gap:6px}
+.pc-fps__res .pc-chip{min-height:36px;padding:0 14px;font-size:12.5px}
+.pc-fps__list{margin-top:16px;display:grid;gap:4px}
+.pc-fps__list li{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"game num" "bar bar";gap:6px 12px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.pc-fps__game{grid-area:game;min-width:0}
+.pc-fps__game b{display:block;font-size:14px;font-weight:600}
+.pc-fps__game small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted)}
+.pc-fps__num{grid-area:num;align-self:center;text-align:right;white-space:nowrap}
+.pc-fps__num b{font:800 20px/1 var(--font-h);color:var(--lvl,var(--text))}
+.pc-fps__num small{margin-left:4px;font-size:11px;color:var(--muted)}
+.pc-fps__bar{grid-area:bar;height:6px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+.pc-fps__bar i{display:block;height:100%;width:var(--w);border-radius:inherit;background:var(--lvl);box-shadow:0 0 12px var(--lvl);transform-origin:0 50%;animation:fps-grow .9s var(--ease) backwards}
+.pc-fps__list li.lvl-4{--lvl:var(--lime)}
+.pc-fps__list li.lvl-3{--lvl:#4ade80}
+.pc-fps__list li.lvl-2{--lvl:#facc15}
+.pc-fps__list li.lvl-1{--lvl:#f87171}
+.pc-fps__note{margin-top:12px;font-size:12px;line-height:1.45;color:var(--muted)}
+@keyframes fps-grow{from{transform:scaleX(0)}}
+@media (min-width:700px){
+  .pc-fps{padding:24px 26px}
+  .pc-fps__list{grid-template-columns:1fr 1fr;column-gap:32px}
+}
+
+/* ——— Окно «Сборка готова! Добавим к ней?» (native <dialog>): снизу на телефоне, по центру на компьютере ——— */
+html.has-dialog{overflow:hidden}
+.pc-extras{width:min(560px,calc(100vw - 24px));max-width:none;max-height:none;margin:auto;padding:0;border:0;background:transparent;color:var(--text);overflow:visible}
+.pc-extras::backdrop{background:rgba(4,5,9,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.pc-extras__box{position:relative;max-height:calc(100dvh - 24px);overflow-y:auto;padding:26px 22px 22px;border-radius:26px;background:linear-gradient(160deg,rgba(185,255,1,.09),rgba(255,255,255,.015)),#0d0f16;border:1px solid rgba(185,255,1,.3);box-shadow:0 40px 90px -30px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.07);text-align:center}
+.pc-extras__box::before{content:"";position:absolute;top:0;left:10%;right:10%;height:2px;background:linear-gradient(90deg,transparent,var(--lime),var(--cyan),transparent)}
+.pc-extras__badge{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:var(--lime);color:#0a0f00;box-shadow:0 0 34px rgba(185,255,1,.45)}
+.pc-extras__badge .ico{width:26px;height:26px}
+.pc-extras h2{text-wrap:balance;margin-top:14px;font:700 clamp(19px,5vw,23px)/1.2 var(--font-h);letter-spacing:-.015em}
+.pc-extras__lead{margin:8px auto 0;max-width:420px;font-size:13.5px;line-height:1.45;color:var(--muted)}
+.pc-extras__grid{display:grid;gap:8px;margin-top:18px;text-align:left}
+.pc-extra{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--text);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .2s,background .2s,transform .15s}
+.pc-extra:active{transform:scale(.985)}
+.pc-extra .pc-upsell__icowrap{flex:none;width:40px;height:40px;margin:0;border-radius:12px}
+.pc-extra .pc-upsell__icowrap .ico{width:22px;height:22px;color:var(--lime)}
+.pc-extra__txt{flex:1;min-width:0}
+.pc-extra__txt b{display:block;font-size:14.5px;font-weight:600}
+.pc-extra__txt small{display:block;margin-top:2px;font-size:12px;line-height:1.35;color:var(--muted)}
+.pc-extra.is-on{border-color:rgba(185,255,1,.6);background:rgba(185,255,1,.1)}
+.pc-extras__actions{display:grid;gap:8px;margin-top:18px}
+.pc-extras__add{width:100%}
+.pc-extras__add:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+.pc-extras__skip{width:100%}
+.pc-extras[open] .pc-extras__box{animation:extras-in .55s var(--ease) backwards}
+.pc-extras[open]::backdrop{animation:extras-fade .35s ease backwards}
+@keyframes extras-in{from{opacity:0;transform:translateY(26px) scale(.96)}}
+@keyframes extras-fade{from{opacity:0}}
+@media (max-width:639.98px){
+  .pc-extras{width:100vw;margin:auto 0 0}
+  .pc-extras__box{max-height:92dvh;border-radius:26px 26px 0 0;border-bottom:0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  @keyframes extras-in{from{transform:translateY(100%)}}
+}
+@media (hover:hover) and (pointer:fine){
+  .pc-extra:hover{border-color:rgba(185,255,1,.4)}
+}
 
 /* ——— Вкладка ИИ ——— */
 .pc-ai{padding:8px 16px 60px}
@@ -193,9 +274,11 @@
   .pc-layout{grid-template-columns:1fr 380px;grid-template-areas:"scene summary" "steps summary"}
   .pc-scene-col{grid-area:scene}
   .pc-steps{grid-area:steps}
-  .pc-summary{grid-area:summary;position:sticky;top:24px}
+  /* закреплённая сводка не выше окна: при полной сборке с длинными названиями она прокручивается сама,
+     иначе низ (итог, кнопка «Отправить») уходил за край экрана */
+  .pc-summary{grid-area:summary;position:sticky;top:24px;max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(185,255,1,.3) transparent}
   .scene{height:400px}
-  .pc-upsell__grid{grid-template-columns:repeat(4,1fr)}
+  .pc-upsell__grid{grid-template-columns:repeat(5,1fr)}
 }
 @media (min-width:640px) and (max-width:899.98px){
   .pc-upsell__grid{grid-template-columns:repeat(2,1fr)}
@@ -243,6 +326,7 @@
 @keyframes opt-in{from{opacity:0;transform:translateY(12px);filter:blur(4px)}}
 @media (prefers-reduced-motion:reduce){
   .js .sr:not(.in){opacity:1}
+  .pc-fps__bar i,.pc-extras[open] .pc-extras__box,.pc-extras[open]::backdrop,
   .sr.in,.pc-step.is-opening .pc-options>*,.pc-summary.sr.in::before,.pc-summary.sr.in::after,.pc-upsell__card.in::after,.pc-summary__rows li.is-new,.pc-summary__total strong.is-bump{animation:none}
   .pc-summary.sr.in::after,.pc-upsell__card.in::after{display:none}
   .pc-summary.sr:not(.in)::before{transform:none}

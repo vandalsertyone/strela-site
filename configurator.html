@@ -57,6 +57,16 @@
     <symbol id="i-desk" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 24h52M10 24v30M54 24v30"/><rect x="22" y="10" width="20" height="12" rx="2" opacity=".7"/>
     </symbol>
+    <symbol id="i-keyboard" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5" y="18" width="54" height="28" rx="4"/><path d="M12 26h3M20 26h3M28 26h3M36 26h3M44 26h3M52 26h0M14 33h3M22 33h3M30 33h3M38 33h3M46 33h3M20 40h24" opacity=".7"/>
+    </symbol>
+    <symbol id="i-mouse" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="18" y="8" width="28" height="48" rx="14"/><path d="M32 8v16M18 24h28" opacity=".7"/>
+    </symbol>
+    <symbol id="i-game" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 20h24c8 0 12 6 13 14l1 8c1 7-6 10-10 5l-5-6H21l-5 6c-4 5-11 2-10-5l1-8c1-8 5-14 13-14z"/><path d="M20 28v8M16 32h8" opacity=".75"/><circle cx="42" cy="29" r="1.6" fill="currentColor"/><circle cx="47" cy="34" r="1.6" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-mousepad" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="18" width="52" height="28" rx="8"/></symbol>
     <symbol id="i-hdd" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="12" y="6" width="40" height="52" rx="4"/><circle cx="32" cy="27" r="12"/><circle cx="32" cy="27" r="2.5"/><path d="M36 33l8 14" opacity=".7"/><path d="M18 51h8" opacity=".6"/>
@@ -158,9 +168,23 @@
         </aside>
       </div>
 
+      <!-- Примерный FPS готовой сборки в популярных играх (оценка, считается в configurator/fps.js) -->
+      <div class="pc-fps" id="fps" hidden>
+        <div class="pc-fps__head">
+          <span class="pc-fps__badge"><svg class="ico" aria-hidden="true"><use href="#i-game"/></svg></span>
+          <div>
+            <h2>Сколько FPS примерно</h2>
+            <p class="pc-fps__sub" id="fpsSub"></p>
+          </div>
+          <div class="pc-fps__res" id="fpsRes" role="group" aria-label="Разрешение экрана"></div>
+        </div>
+        <ul class="pc-fps__list" id="fpsList"></ul>
+        <p class="pc-fps__note" id="fpsNote">Ориентировочная оценка по открытым тестам видеокарт, а не замер именно этой сборки. Реальный FPS зависит от процессора (особенно в киберспортивных играх), настроек, драйверов и версии игры.</p>
+      </div>
+
       <div class="pc-upsell" id="upsell" hidden>
         <h2 class="sr">Возможно, пригодится ещё</h2>
-        <p class="pc-upsell__note sr">Подберём вместе с консультантом — цены на эти категории уточняйте отдельно.</p>
+        <p class="pc-upsell__note sr">Отметьте, что добавить, — консультант подберёт варианты под вашу сборку и назовёт цены.</p>
         <div class="pc-upsell__grid" id="upsellGrid"></div>
       </div>
     </section>
@@ -208,6 +232,20 @@
       <p class="legal">Общество с ограниченной ответственностью «Стрела ШОП», УНП 193725332. Юридический адрес: 220070, г. Минск, ул. Радиальная 40, 3 этаж каб. 5-5. Регистрация в торговом реестре: №756913 от 01.09.2025г. Дата государственной регистрации: 22.07.2025. Регистрационный номер в ЕГР: 193725332.</p>
     </div>
   </footer>
+
+  <!-- «А к сборке?» — предложение допов после того, как сборка готова (как «картошечку к заказу?») -->
+  <dialog class="pc-extras" id="extras" aria-labelledby="extrasTitle">
+    <form method="dialog" class="pc-extras__box">
+      <span class="pc-extras__badge" aria-hidden="true"><svg class="ico"><use href="#i-plus"/></svg></span>
+      <h2 id="extrasTitle">Сборка готова! Добавим к ней?</h2>
+      <p class="pc-extras__lead">Отметьте, что ещё пригодится, — консультант подберёт варианты под ваш ПК и назовёт цены вместе со сборкой.</p>
+      <div class="pc-extras__grid" id="extrasGrid"></div>
+      <div class="pc-extras__actions">
+        <button class="key pc-extras__add" id="extrasAdd" value="add" type="submit">Добавить к сборке</button>
+        <button class="ghost pc-extras__skip" id="extrasSkip" value="skip" type="submit">Нет, спасибо</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

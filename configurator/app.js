@@ -3,6 +3,7 @@ import { CATALOG, CATALOG_META, STEPS, FORM_LABEL, FORM_RANK, findPart, isRequir
 import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt } from "./compat.js";
 import { splitPrice, INSTALLMENT_MONTHS, CREDIT_ANNUAL_RATE } from "./installment.js";
 import { UPSELL } from "./upsell.js";
+import { estimateFps, fpsLevel, RESOLUTIONS } from "./fps.js";
 import { sourceLine, telegramUrl } from "../js/engine.js";
 import { createScene } from "./scene.js";
 
@@ -20,6 +21,10 @@ const touched = {}; // отметить необязательные шаги, �
 let openStep = STEPS[0].key;
 let catalogReady = false;
 let installmentMonths = INSTALLMENT_MONTHS[0];
+const extras = new Set(); // отмеченные допы (id из UPSELL) — уходят консультанту в сообщении
+let extrasOffered = false; // окно «Добавим к сборке?» показываем один раз на сборку (до «Начать заново»)
+let wasComplete = false;
+let fpsRes = 0; // разрешение в блоке FPS: 0 — Full HD, 1 — 2K, 2 — 4K
 
 // ——— появление блоков при прокрутке (.sr, стили — css/configurator.css) ———
 // Каждый блок анимируется один раз. Шаги конструктора перерисовываются при каждом клике, поэтому
@@ -115,7 +120,7 @@ const FACETS = {
   hdd: [{ key: "cap", get: (p) => gb(p.cap), sort: (p) => p.cap }],
   psu: [{ key: "watt", get: (p) => wattBand(p.watt), sort: (p) => p.watt }, { key: "rating", get: (p) => p.rating }],
   case: [{ key: "color", get: (p) => ({ white: "Белые", black: "Чёрные" })[p.color] || "Другие цвета" }, { key: "form", get: (p) => (p.form ? `до ${FORM_LABEL[p.form]}` : null), sort: (p) => FORM_RANK[p.form] }],
-  cooler: [{ key: "type", get: (p) => (p.type === "aio" ? "Жидкостные (СЖО)" : "Воздушные") }, { key: "color", get: (p) => (p.color === "white" ? "Белые" : null) }],
+  cooler: [{ key: "type", get: (p) => (p.type === "aio" ? "Водяное охлаждение" : "Воздушное охлаждение") }, { key: "color", get: (p) => (p.color === "white" ? "Белые" : null) }],
 };
 
 /** Короткая строка характеристик под названием варианта */
@@ -129,7 +134,7 @@ function specLine(step, p) {
     hdd: [p.cap && gb(p.cap), p.rpm && `${p.rpm} об/мин`],
     psu: [p.watt && `${p.watt} Вт`, p.rating, p.modular && "модульный"],
     case: [p.form && `до ${FORM_LABEL[p.form]}`, p.gpuMax && `видеокарта до ${p.gpuMax} мм`, p.coolerMax && `кулер до ${p.coolerMax} мм`],
-    cooler: [p.type === "aio" ? `СЖО ${p.rad || ""} мм`.replace("  ", " ") : p.towers > 1 ? "двухбашенный" : p.lowProfile ? "низкопрофильный" : "башенный", p.tdp && `до ${p.tdp} Вт`, p.type !== "aio" && p.height && `высота ${p.height} мм`],
+    cooler: [p.type === "aio" ? (p.rad ? `водяное охлаждение ${p.rad} мм` : "водяное охлаждение") : p.towers > 1 ? "двухбашенный" : p.lowProfile ? "низкопрофильный" : "башенный", p.tdp && `до ${p.tdp} Вт`, p.type !== "aio" && p.height && `высота ${p.height} мм`],
   }[step];
   return (bits || []).filter(Boolean).join(" · ");
 }
@@ -349,6 +354,10 @@ function choose(step, id) {
   renderSteps();
   renderCompat();
   renderSummary();
+  // сборка только что стала полной — предлагаем допы («картошечку к заказу?»), один раз на сборку
+  const complete = isComplete();
+  if (complete && !wasComplete && !extrasOffered) setTimeout(openExtras, motionOK ? 900 : 200);
+  wasComplete = complete;
   // на телефоне — подвести к следующему шагу, чтобы не листать вручную
   if (openStep && motionOK) requestAnimationFrame(() => stepEls[openStep]?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
 }
@@ -440,6 +449,7 @@ function buildMessage(t, compat) {
     if (part) lines.push(`— ${s.title}: ${part.full || part.name} (код ${part.id})`);
     else if (touched[s.key] && s.noneLabel && !isRequired(s.key, sel)) lines.push(`— ${s.title}: ${s.noneLabel.toLowerCase()}`);
   });
+  if (extras.size) lines.push(`— Ещё подобрать: ${extraList("word")}`);
   if (!t.parts.length) lines.push("(детали пока не выбраны)");
   else if (t.priced) lines.push(`Итого: ${t.total} BYN (ориентировочно)`);
   else lines.push("Подскажите, пожалуйста, итоговую цену и наличие.");
@@ -466,11 +476,14 @@ function renderSummary() {
         const v = li.querySelector(".v");
         if (x.part.price != null) v.textContent = `${x.part.price} BYN`;
         else {
+          // без цены справа показываем название целиком: подпись шага сверху, название под ней на всю ширину
+          li.classList.add("is-name");
           v.classList.add("v--name");
           v.textContent = x.part.name;
         }
         return li;
       }),
+    ...(extras.size ? [extrasRow()] : []),
   );
   totalEl.textContent = !t.parts.length ? "0 BYN" : t.priced ? `${t.total} BYN` : "По запросу";
   totalEl.classList.toggle("is-ask", t.parts.length > 0 && !t.priced);
@@ -499,8 +512,128 @@ function renderSummary() {
   sendBtn.querySelector("span").textContent = !t.parts.length ? "Написать консультанту" : !compat.ok ? "Отправить (есть предупреждения)" : t.priced ? "Отправить консультанту в Telegram" : "Узнать цену у консультанта";
   sendBtn.dataset.message = message;
 
-  const requiredFilled = STEPS.filter((s) => isRequired(s.key, sel)).every((s) => sel[s.key]);
+  const requiredFilled = isComplete();
   upsellBox.hidden = !requiredFilled;
+  syncUpsell();
+  renderFps(requiredFilled);
+}
+const isComplete = () => STEPS.filter((s) => isRequired(s.key, sel)).every((s) => sel[s.key]);
+const extraList = (field) => UPSELL.filter((u) => extras.has(u.id)).map((u) => u[field]).join(", ");
+function extrasRow() {
+  const li = el("li", "is-name is-extra", `<span class="k">Дополнительно подобрать</span><span class="v v--name"></span>`);
+  li.querySelector(".v").textContent = extraList("title");
+  return li;
+}
+
+// ——— примерный FPS в популярных играх (готовая сборка) ———
+const fpsBox = $("#fps");
+const fpsList = $("#fpsList");
+const fpsSub = $("#fpsSub");
+const fpsResEl = $("#fpsRes");
+const fpsNote = $("#fpsNote");
+const fpsNoteText = fpsNote.textContent;
+RESOLUTIONS.forEach((r) => {
+  const b = el("button", "pc-chip", `${r.label}`);
+  b.type = "button";
+  b.title = r.hint;
+  b.addEventListener("click", () => {
+    fpsRes = r.key;
+    renderFps(true);
+  });
+  fpsResEl.appendChild(b);
+});
+let fpsShown = false;
+function renderFps(complete) {
+  fpsBox.hidden = !complete;
+  if (!complete) {
+    fpsShown = false;
+    return;
+  }
+  if (!fpsShown) {
+    fpsShown = true;
+    sr(fpsBox, "card");
+  }
+  const gpu = findPart("gpu", sel.gpu);
+  const rows = gpu ? estimateFps(gpu, fpsRes) : null;
+  [...fpsResEl.children].forEach((b, i) => {
+    b.classList.toggle("is-on", i === fpsRes);
+    b.setAttribute("aria-pressed", String(i === fpsRes));
+  });
+  fpsResEl.hidden = !rows;
+  fpsSub.textContent = gpu ? `С видеокартой ${gpu.name} · под названием игры — настройки графики` : "Сборка без видеокарты";
+  fpsNote.textContent = !gpu
+    ? "Без видеокарты FPS в играх не оцениваем: встроенной графики хватит для учёбы, работы и нетребовательных игр. Для современных игр добавьте видеокарту."
+    : !rows
+      ? "Для этой видеокарты оценки пока нет — консультант подскажет, как она покажет себя в играх."
+      : gpu.pro
+        ? `Это профессиональная видеокарта — она рассчитана на работу, а не на игры. ${fpsNoteText}`
+        : fpsNoteText;
+  fpsList.replaceChildren(
+    ...(rows || []).map((g) => {
+      const { level, label } = fpsLevel(g.fps);
+      const li = el("li", `lvl-${level}`);
+      li.innerHTML = `<span class="pc-fps__game"><b></b><small></small></span><span class="pc-fps__bar" aria-hidden="true"><i></i></span><span class="pc-fps__num"><b></b><small>FPS</small></span>`;
+      li.querySelector(".pc-fps__game b").textContent = g.name;
+      li.querySelector(".pc-fps__game small").textContent = `${g.preset[0].toUpperCase()}${g.preset.slice(1)} · ${label}`;
+      li.querySelector(".pc-fps__num b").textContent = `~${g.fps}`;
+      li.querySelector(".pc-fps__bar i").style.setProperty("--w", `${Math.max(4, Math.min(100, (g.fps / 240) * 100))}%`);
+      return li;
+    }),
+  );
+}
+
+// ——— допы: окно «Сборка готова! Добавим к ней?» и карточки под конструктором ———
+const extrasDlg = $("#extras");
+const extrasGrid = $("#extrasGrid");
+const extrasAdd = $("#extrasAdd");
+let pending = new Set();
+function extraToggle(u, on, onClick, cls) {
+  const b = el("button", `${cls}${on ? " is-on" : ""}`, `<span class="pc-upsell__icowrap"><svg class="ico" aria-hidden="true"><use href="#i-${u.icon}"/></svg></span><span class="pc-extra__txt"><b></b><small></small></span><span class="pc-extra__check" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span>`);
+  b.type = "button";
+  b.dataset.extra = u.id;
+  b.setAttribute("aria-pressed", String(on));
+  b.querySelector("b").textContent = u.title;
+  b.querySelector("small").textContent = u.desc;
+  b.addEventListener("click", onClick);
+  return b;
+}
+function renderExtrasGrid() {
+  extrasGrid.replaceChildren(
+    ...UPSELL.map((u) =>
+      extraToggle(u, pending.has(u.id), () => {
+        pending.has(u.id) ? pending.delete(u.id) : pending.add(u.id);
+        renderExtrasGrid();
+      }, "pc-extra"),
+    ),
+  );
+  extrasAdd.disabled = pending.size === 0;
+  extrasAdd.textContent = pending.size ? `Добавить к сборке (${pending.size})` : "Отметьте, что добавить";
+}
+function openExtras() {
+  if (extrasOffered || !isComplete() || extrasDlg.open || typeof extrasDlg.showModal !== "function") return;
+  extrasOffered = true;
+  pending = new Set(extras);
+  renderExtrasGrid();
+  extrasDlg.showModal();
+  document.documentElement.classList.add("has-dialog");
+}
+extrasDlg.addEventListener("click", (e) => {
+  if (e.target === extrasDlg) extrasDlg.close("skip"); // клик по затемнению вокруг окна
+});
+// применяем сразу по нажатию (событие close приходит позже — ссылка на Telegram должна обновиться до этого)
+extrasAdd.addEventListener("click", () => {
+  if (!pending.size) return;
+  pending.forEach((id) => extras.add(id));
+  renderSummary();
+  toast(`Добавили в заявку: ${extraList("word")} — консультант подберёт варианты.`);
+});
+extrasDlg.addEventListener("close", () => document.documentElement.classList.remove("has-dialog"));
+function syncUpsell() {
+  document.querySelectorAll("#upsellGrid [data-extra]").forEach((b) => {
+    const on = extras.has(b.dataset.extra);
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
 }
 
 sendBtn.addEventListener("click", async () => {
@@ -520,6 +653,9 @@ $("#pcReset").addEventListener("click", () => {
     view[s.key] = { q: "", facets: {}, limit: PAGE };
     scene.set(s.key, null);
   });
+  extras.clear();
+  extrasOffered = false;
+  wasComplete = false;
   openStep = STEPS[0].key;
   renderSteps();
   renderCompat();
@@ -527,9 +663,13 @@ $("#pcReset").addEventListener("click", () => {
 });
 
 // ——— апсейл ———
+// карточки-переключатели: отмеченное добавляется в сводку и в сообщение консультанту
 $("#upsellGrid").replaceChildren(
   ...UPSELL.map((u) => {
-    const c = el("div", "pc-upsell__card", `<span class="pc-upsell__icowrap"><svg class="ico" aria-hidden="true"><use href="#i-${u.icon}"/></svg></span><h3>${u.title}</h3><p>${u.desc}</p>`);
+    const c = extraToggle(u, false, () => {
+      extras.has(u.id) ? extras.delete(u.id) : extras.add(u.id);
+      renderSummary();
+    }, "pc-upsell__card");
     sr(c, "card");
     return c;
   }),
