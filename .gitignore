@@ -1,0 +1,16 @@
+# В публичный репозиторий (GitHub Pages) идёт ТОЛЬКО сайт.
+# Внутренние заметки (CLAUDE.md, README.md, content/), тесты (tools/) и скриншоты остаются локально.
+/*
+!/.gitignore
+!/.nojekyll
+!/index.html
+!/configurator.html
+!/config.js
+!/scenarios.js
+!/assets/
+!/configurator/
+!/css/
+!/js/
+node_modules/
+.DS_Store
+*.log

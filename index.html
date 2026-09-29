@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Strela — Нет в каталоге? Привезём</title>
+  <meta name="description" content="Ноутбуки, сборка ПК и огромный выбор игровой периферии. Расскажите, что ищете, — подберём и привезём в кратчайшие сроки.">
+  <meta name="theme-color" content="#07080d">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:site_name" content="Strela">
+  <meta property="og:title" content="Strela — Нет в каталоге? Привезём">
+  <meta property="og:description" content="Ноутбуки, сборка ПК и огромный выбор игровой периферии. Расскажите, что ищете, — подберём и привезём в кратчайшие сроки.">
+  <meta property="og:image" content="assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preload" href="assets/fonts/inter-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/unbounded-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <script>document.documentElement.classList.add("js");</script>
+  <!-- Аналитика не подключена. Сюда можно вставить счётчик (см. README, раздел «Аналитика»). -->
+  <!-- <script defer src="…"></script> -->
+</head>
+<body>
+  <!-- Иконки (спрайт): используются в карточках и подвале -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="g-ico" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#d6ff5c"/><stop offset="1" stop-color="#22d3ee"/>
+      </linearGradient>
+    </defs>
+    <symbol id="i-laptop" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="11" y="13" width="42" height="28" rx="3.5"/><rect x="15" y="17" width="34" height="20" rx="1.5" opacity=".45"/>
+      <path d="M4 47h56l-3.5 5H7.5z"/><path d="M27 47h10" opacity=".6"/>
+    </symbol>
+    <symbol id="i-pc" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="17" y="6" width="30" height="52" rx="4.5"/><circle cx="32" cy="16" r="3"/>
+      <path d="M23 27h18M23 32h18" opacity=".55"/><circle cx="32" cy="45" r="7.5"/><path d="M32 40v10M27 45h10" opacity=".55"/>
+    </symbol>
+    <symbol id="i-keyboard" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="16" width="58" height="32" rx="5.5"/>
+      <path d="M11 25h2M19 25h2M27 25h2M35 25h2M43 25h2M51 25h2M14 32h2M22 32h2M30 32h2M38 32h2M46 32h2" opacity=".75"/>
+      <path d="M19 40h26" opacity=".75"/>
+    </symbol>
+    <symbol id="i-mouse" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 5c-8 0-13 5.5-13 13v22c0 8.5 5.5 14 13 14s13-5.500 13-14V18C45 10.500 40 5 32 5z"/>
+      <path d="M19 26h26M32 5v21" opacity=".6"/><rect x="30" y="12" width="4" height="8" rx="2" opacity=".85"/>
+    </symbol>
+    <symbol id="i-headphones" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 40V32a21 21 0 0 1 42 0v8"/><rect x="7" y="37" width="12" height="19" rx="5"/><rect x="45" y="37" width="12" height="19" rx="5"/>
+    </symbol>
+    <symbol id="i-box" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 6l22 12v26L32 58 10 44V18z"/><path d="M10 18l22 12 22-12M32 30v28" opacity=".6"/>
+    </symbol>
+    <symbol id="i-tg" viewBox="0 0 24 24"><path fill="currentColor" d="M9.78 15.6l-.4 4.2c.57 0 .82-.25 1.12-.54l2.7-2.58 5.6 4.1c1.03.57 1.76.27 2.04-.95l3.7-17.3c.34-1.53-.55-2.13-1.55-1.76L1.2 9.1C-.28 9.68-.26 10.5.94 10.87l5.56 1.73 12.9-8.13c.6-.4 1.16-.18.7.22"/></symbol>
+    <symbol id="i-ig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-yt" viewBox="0 0 24 24"><path fill="currentColor" d="M21.6 7.2a2.5 2.5 0 0 0-1.76-1.77C18.27 5 12 5 12 5s-6.27 0-7.84.43A2.5 2.5 0 0 0 2.4 7.2C2 8.780 2 12 2 12s0 3.220.4 4.800a2.500 2.500 0 0 0 1.760 1.770C5.730 19 12 19 12 19s6.270 0 7.840-.430a2.500 2.500 0 0 0 1.760-1.770C22 15.220 22 12 22 12s0-3.220-.4-4.800zM10 15V9l5.200 3z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.500 11.500L12 5l6.500 6.500"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5.500 12.500L12 19l6.500-6.500"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.500-5.800M4 4v5h5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.500 3v5.500c0 4.500-3 8-7.500 9.500-4.500-1.500-7.500-5-7.500-9.500V6z"/><path d="M8.800 12.200l2.200 2.200 4.200-4.400"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M12 6v12M3 12h18" opacity=".6"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.500 6.500h11v9h-11zM13.500 9.500h4l3 3v3h-7"/><circle cx="7" cy="17" r="1.800"/><circle cx="17" cy="17" r="1.800"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.500-5.800-6.500-11a6.500 6.500 0 0 1 13 0c0 5.200-6.500 11-6.500 11z"/><circle cx="12" cy="10" r="2.400"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2.500"/><circle cx="12" cy="8" r="1.500"/><path d="M9 13h6M9 16h6" opacity=".6"/></symbol>
+  </svg>
+
+  <!-- Живой фон: дрейфующие свечения и силуэты устройств -->
+  <div class="bg" aria-hidden="true">
+    <i class="blob blob--a"></i><i class="blob blob--b"></i><i class="blob blob--c"></i>
+    <svg class="sil sil--laptop" data-depth="0.5"><use href="#i-laptop"/></svg>
+    <svg class="sil sil--keyboard" data-depth="0.9"><use href="#i-keyboard"/></svg>
+    <svg class="sil sil--headphones" data-depth="0.7"><use href="#i-headphones"/></svg>
+    <svg class="sil sil--mouse" data-depth="1.1"><use href="#i-mouse"/></svg>
+  </div>
+
+  <main>
+    <!-- 1. Первый экран: чат-помощник + карточки категорий -->
+    <section class="stage" id="top" aria-labelledby="h1">
+      <header class="topbar">
+        <a class="logo" href="https://strelashop.by" aria-label="Strela — перейти на сайт strelashop.by"><img src="assets/logo.svg" alt="Strela" width="106" height="35"></a>
+        <a class="topbar__link topbar__link--desktop" href="https://strelashop.by/catalog/">Весь каталог</a>
+        <a class="topbar__link topbar__link--mobile" href="#how">Как это работает <svg class="ico" aria-hidden="true"><use href="#i-down"/></svg></a>
+      </header>
+
+      <div class="hero" id="hero">
+        <div class="hero__inner">
+          <h1 id="h1">Нет в каталоге? <span class="accent">Привезём.</span></h1>
+          <p class="lead">Ноутбуки, ПК и огромный выбор игровой периферии. Расскажите, что ищете, — подберём и привезём в кратчайшие сроки.</p>
+        </div>
+      </div>
+
+      <div class="chat" id="chat">
+        <div class="chat__head">
+          <span class="avatar avatar--lg" aria-hidden="true"></span>
+          <div class="chat__who"><strong>Помощник Strela</strong><small>Подготовит ваш запрос</small></div>
+          <button class="ghost ghost--icon" id="restart" type="button" aria-label="Начать заново"><svg class="ico" aria-hidden="true"><use href="#i-reset"/></svg><span>Начать заново</span></button>
+        </div>
+        <div class="chat__log" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Диалог с помощником Strela"></div>
+        <div class="strip" id="strip" aria-label="Категории"></div>
+        <form class="composer" id="composer" autocomplete="off">
+          <div class="composer__field">
+            <label class="sr-only" for="chat-input">Напишите, что вы ищете</label>
+            <textarea id="chat-input" rows="1" maxlength="400" enterkeyhint="send" autocomplete="off" autocapitalize="sentences"></textarea>
+            <span class="ph" id="ph" aria-hidden="true"></span>
+          </div>
+          <button class="key key--send" type="submit" aria-label="Отправить сообщение"><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        </form>
+        <p class="chat__note">Помощник подготовит запрос — ответит вам живой консультант в Telegram</p>
+      </div>
+
+      <div class="cats" id="cats" aria-label="Категории техники"></div>
+    </section>
+
+    <!-- 2. Как это работает -->
+    <section class="section how" id="how" aria-labelledby="how-h">
+      <div class="container">
+        <p class="eyebrow reveal">Как это работает</p>
+        <h2 id="how-h" class="reveal">Четыре шага до <span class="accent">нужной техники</span></h2>
+        <ol class="steps">
+          <li class="step reveal" style="--d:0">
+            <span class="step__n" aria-hidden="true">1</span>
+            <h3>Напишите, что нужно</h3>
+            <p>Модель, характеристики или просто задачу.</p>
+          </li>
+          <li class="step reveal" style="--d:1">
+            <span class="step__n" aria-hidden="true">2</span>
+            <h3>Консультант подберёт варианты</h3>
+            <p>И уточнит детали.</p>
+          </li>
+          <li class="step reveal" style="--d:2">
+            <span class="step__n" aria-hidden="true">3</span>
+            <h3>Привезём в кратчайшие сроки</h3>
+            <p>Даже если нужной модели нет в каталоге.</p>
+          </li>
+          <li class="step reveal" style="--d:3">
+            <span class="step__n" aria-hidden="true">4</span>
+            <h3>Заберите или оформите доставку</h3>
+            <p>Заберите в магазине или оформите доставку по Беларуси.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 3. Почему Strela -->
+    <section class="section why" id="why" aria-labelledby="why-h">
+      <div class="container">
+        <p class="eyebrow reveal">Почему Strela</p>
+        <h2 id="why-h" class="reveal">Сеть магазинов электроники <span class="accent">в Беларуси</span></h2>
+
+        <ul class="stats">
+          <li class="stat reveal" style="--d:0"><b class="stat__n" data-count="5" data-suffix="К+">5К+</b><span>довольных клиентов</span></li>
+          <li class="stat reveal" style="--d:1"><b class="stat__n" data-count="10" data-suffix="К+">10К+</b><span>выполненных заказов</span></li>
+          <li class="stat reveal" style="--d:2"><b class="stat__n" data-count="30" data-suffix="+">30+</b><span>брендов техники</span></li>
+        </ul>
+
+        <ul class="facts">
+          <li class="fact fact--w2 reveal" style="--d:0"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg><h3>Официальная гарантия</h3><p>Вся продукция имеет официальную гарантию от поставщика.</p></li>
+          <li class="fact fact--w2 reveal" style="--d:1"><svg class="ico" aria-hidden="true"><use href="#i-split"/></svg><h3>Рассрочка и оплата частями</h3><p>Не нужно платить всю сумму сразу.</p></li>
+          <li class="fact fact--w2 reveal" style="--d:2"><svg class="ico" aria-hidden="true"><use href="#i-truck"/></svg><h3>Доставка по Беларуси</h3><p>Заберите в магазине или оформите доставку в любую точку страны.</p></li>
+          <li class="fact fact--w3 reveal" style="--d:0"><svg class="ico" aria-hidden="true"><use href="#i-pin"/></svg><h3>Магазины в пяти городах</h3><p>Минск, Витебск, Гомель, Гродно и Могилёв — девять магазинов сети.</p></li>
+          <li class="fact fact--w3 reveal" style="--d:1"><svg class="ico" aria-hidden="true"><use href="#i-build"/></svg><h3>Сборка ПК в магазинах</h3><p>Соберём компьютер с нуля: эксперты помогут подобрать совместимые комплектующие.</p></li>
+        </ul>
+
+        <div class="cta reveal">
+          <p>Не нашли нужное? Напишите консультанту — подберём и привезём.</p>
+          <a class="key" href="#top" data-scroll-chat>Открыть чат с помощником</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 4. Магазины и ссылки -->
+  <footer class="footer" id="stores">
+    <div class="container">
+      <h2 class="footer__title">Наши магазины</h2>
+      <div class="stores">
+        <div class="stores__col"><h3>Минск</h3><ul><li>ТРЦ «Dana-Mall», ул. Петра Мстиславца 11, этаж 3</li></ul></div>
+        <div class="stores__col"><h3>Витебск</h3><ul><li>ТЦ «Марко-Сити», ул. Ленина 26А, этаж -1</li><li>ТЦ «ТриО», просп. Строителей 15Г, этаж 2</li></ul></div>
+        <div class="stores__col"><h3>Гомель</h3><ul><li>ТРЦ «Мандарин Плаза», Речицкий просп. 5В, этаж 1</li></ul></div>
+        <div class="stores__col"><h3>Гродно</h3><ul><li>ТЦ «Old City», ул. Дубко 17, этаж 2</li></ul></div>
+        <div class="stores__col"><h3>Могилёв</h3><ul><li>ТЦ «Парк Сити», Минское ш. 31, этаж 1</li><li>ТЦ «Армада», ул. Лазаренко 73Б, этаж -1</li><li>Пушкинский просп. 30</li><li>ТЦ «Форум», ул. Крупской 119, этаж -1</li></ul></div>
+      </div>
+
+      <nav class="links" aria-label="Ссылки Strela">
+        <a class="key key--sm" href="https://strelashop.by" target="_blank" rel="noopener">Весь каталог</a>
+        <a class="pill" href="https://t.me/strela_shop" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true"><use href="#i-tg"/></svg>Telegram-канал</a>
+        <a class="pill" href="https://www.instagram.com/strelashop.by/" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true"><use href="#i-ig"/></svg>Instagram</a>
+        <a class="pill" href="https://www.youtube.com/channel/UCtuuD6V2ftt_w9wyCWxRnWg" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true"><use href="#i-yt"/></svg>YouTube</a>
+      </nav>
+
+      <p class="legal">Общество с ограниченной ответственностью “Стрела ШОП”, УНП 193725332. Юридический адрес: 220070, г. Минск, ул. Радиальная 40, 3 этаж каб. 5-5. Регистрация в торговом реестре: №756913 от 01.09.2025г. Дата государственной регистрации: 22.07.2025. Регистрационный номер в ЕГР: 193725332.</p>
+    </div>
+  </footer>
+
+  <!-- 5. Закреплённая кнопка -->
+  <a class="key key--fab" id="fab" href="#top" hidden aria-label="Написать консультанту в Telegram"><svg class="ico" aria-hidden="true"><use href="#i-tg"/></svg><span>Написать консультанту</span></a>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <noscript>
+    <p class="noscript">Для работы помощника нужен JavaScript. Напишите нам в <a href="https://t.me/strela_shop">Telegram</a> или откройте <a href="https://strelashop.by">каталог</a>.</p>
+  </noscript>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
