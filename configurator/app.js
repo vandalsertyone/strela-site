@@ -4,7 +4,7 @@ import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt } 
 import { splitPrice, INSTALLMENT_MONTHS, CREDIT_ANNUAL_RATE } from "./installment.js";
 import { UPSELL } from "./upsell.js";
 import { estimateFps, fpsLevel, RESOLUTIONS } from "./fps.js";
-import { topPicks, byFreshness } from "./picks.js";
+import { topPicks, byPopularity } from "./picks.js";
 import { sourceLine, telegramUrl } from "../js/engine.js";
 import { createScene } from "./scene.js";
 
@@ -218,7 +218,7 @@ function facetRows(step, parts) {
 }
 
 function optionButton(s, p, pick) {
-  const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : "") + (pick ? ` pc-option--pick lvl-${pick.tier}` : ""));
+  const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : "") + (pick ? ` pc-option--pick lvl-${pick.tier}${pick.top ? " is-top" : ""}` : ""));
   opt.type = "button";
   opt.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg></span>
     <span class="pc-option__mid">${pick ? `<span class="pc-pick__tag">${pick.name}</span>` : ""}<span class="pc-option__name"></span><span class="pc-option__spec"></span><span class="pc-option__meta">${partMeta(s.key, p)}</span></span>
@@ -239,8 +239,8 @@ function renderStepBody(s) {
     inner.appendChild(el("p", "pc-empty", "Загружаем каталог комплектующих…"));
     return body;
   }
-  // сверху — актуальные детали (сортировка по «свежести», см. picks.js), внутри — прежний порядок каталога
-  const all = byFreshness(s.key, filterOptions(s.key, sel));
+  // сверху — популярные детали, устаревшее — в конце (см. picks.js)
+  const all = byPopularity(s.key, filterOptions(s.key, sel));
   const hiddenCount = CATALOG[s.key].length - all.length;
   const v = view[s.key];
 
@@ -276,10 +276,10 @@ function renderStepBody(s) {
       none.addEventListener("click", () => choose(s.key, null));
       items.push(none);
     }
-    // «Актуально сейчас»: по одной современной детали трёх уровней (с учётом чипов-фильтров; при поиске — не показываем)
+    // «Популярное»: по одной детали каждого уровня, от бюджета до топа (с учётом чипов-фильтров; при поиске — не показываем)
     const picks = !v.q ? topPicks(s.key, shown) : [];
     if (picks.length) {
-      const box = el("div", "pc-picks", `<p class="pc-picks__head"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>Актуально сейчас<small>современные модели разного уровня</small></p>`);
+      const box = el("div", "pc-picks", `<p class="pc-picks__head"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>Популярное<small>что чаще всего берут — от бюджета до топа</small></p>`);
       picks.forEach((pk) => box.appendChild(optionButton(s, pk.part, pk)));
       items.push(box);
     }

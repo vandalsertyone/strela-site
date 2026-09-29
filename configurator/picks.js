@@ -1,18 +1,25 @@
-// «Актуально сейчас»: что показывать первым в списке вариантов (просьба заказчика 29.09.2026 — «в самом топе какое-то
-// старое и непопулярное железо»). Цен в прайсе пока нет, поэтому уровень считаем не по цене, а по классу детали.
+// «Популярное»: что показывать первым в списке вариантов. История: 29.09.2026 заказчик — «в самом топе какое-то старое
+// и непопулярное железо»; затем — «изучи топы по продажам в разных ценовых… самый топовый, который у нас просят, —
+// Ryzen 7 7800X3D, выше него реально не запрашивали, пониже — 7700, i5 14-го поколения и т.д.».
 //
-//  1. fresh(step, part) — насколько деталь современная (0 — устаревшая … 3 — текущее поколение). По ней сортируется
-//     весь список: сначала свежие, внутри одной «свежести» — прежний порядок каталога (наличие у поставщика, название).
-//  2. TIERS — три уровня подборки над списком: «Базовый», «Оптимальный», «Максимум». У каждого уровня — список правил
-//     по убыванию предпочтения; берётся первая совместимая деталь (в порядке каталога), подошедшая под самое раннее
-//     правило. Правила — классы и поколения железа на осень 2026 года, без выдуманных цифр продаж.
+// Данные о спросе: сортировка «Популярные» каталога Onliner (Беларусь; продажи он не публикует — это ближайший открытый
+// показатель), снимок — tools/fetch-onliner-popularity.mjs → поле pop в catalog.json (место в рейтинге раздела, 1 — самый
+// популярный). У корпусов ещё band — ценовой сегмент 1..3 по рыночной цене (границы — BANDS в build-catalog.mjs).
 //
-// Новое поколение в прайсе → добавить его в FRESH/TIERS, иначе оно просто встанет в общий список по свежести 0.
+//  1. Весь список шага: сначала популярные (по pop), без рейтинга — после них по «свежести»; явно устаревшее (fresh = 0:
+//     GT 210, SATA на 240 ГБ, БП без сертификата…) — в самом конце. Внутри равных — прежний порядок каталога.
+//  2. TIERS — уровни подборки над списком. У уровня — правила по убыванию предпочтения; из совместимых деталей под
+//     самое раннее правило берётся самая популярная. Процессоры — лестница по спросу заказчика (потолок — 7800X3D),
+//     остальное — самые популярные модели своего ценового сегмента.
+//
+// Обновить популярность: node tools/fetch-onliner-popularity.mjs && node tools/build-catalog.mjs <прайс.xlsx>.
+// Новое поколение в прайсе → дописать в FRESH и при необходимости в TIERS.
 
 const has = (re) => (p) => re.test(p.name);
 const chip = (re) => (p) => re.test(p.chip || "");
+const chipset = (...list) => (p) => list.includes(p.chipset);
 
-// ——— свежесть (0..3) ———
+// ——— свежесть (0..3): 0 — явно устаревшее, уходит в конец списка ———
 const CPU_GEN = { granite: 3, arrow: 3, "arrow-r": 3, raphael: 2, phoenix: 2, raptor: 2, alder: 1, vermeer: 1, cezanne: 1 };
 const MB_CHIPSET = {
   B850: 3, X870: 3, X870E: 3, B840: 3, Z890: 3, B860: 3, H810: 3,
@@ -22,10 +29,7 @@ const MB_CHIPSET = {
 const FRESH = {
   cpu: (p) => CPU_GEN[p.gen] ?? 0,
   motherboard: (p) => MB_CHIPSET[p.chipset] ?? 0,
-  ram: (p) => {
-    const f = p.mem === "DDR5" ? (p.mhz >= 5600 ? 3 : 2) : p.mhz >= 3200 ? 1 : 0;
-    return p.cap < 16 ? Math.min(f, 1) : f;
-  },
+  ram: (p) => (p.cap < 16 ? 0 : p.mem === "DDR5" ? (p.mhz >= 5600 ? 3 : 2) : p.mhz >= 3200 ? 1 : 0),
   gpu: (p) => {
     const c = p.chip || "";
     if (p.pro) return 1;
@@ -42,78 +46,113 @@ const FRESH = {
 };
 export const fresh = (step, p) => FRESH[step]?.(p) ?? 0;
 
-// ——— три уровня подборки ———
-export const TIER_NAMES = ["Базовый", "Оптимальный", "Максимум"];
-const ram = (cap, sticks, mem, mhz = 0) => (p) => p.cap === cap && (!sticks || p.sticks === sticks) && p.mem === mem && p.mhz >= mhz;
-const nvme = (cap, read) => (p) => p.iface === "nvme" && p.cap === cap && p.read >= read;
+// ——— уровни подборки ———
+const NAMES4 = ["Бюджет", "Оптимум", "Мощный", "Топ"];
+const NAMES3 = ["Бюджет", "Оптимум", "Топ"];
+const ram = (cap, sticks, mem, mhz = 0) => (p) => p.cap === cap && (!sticks || p.sticks === sticks) && (!mem || p.mem === mem) && p.mhz >= mhz;
 const psu = (min, max, rating) => (p) => p.watt >= min && p.watt <= max && rating.test(p.rating || "");
+const DESKTOP_HDD = /Barracuda|WD Blue|WD Black|Toshiba (P300|DT0)/;
+// (?![0-9A-Z]) — чтобы «Ryzen 5 5600» не цеплял 5600X/5600G/5600GT
+const cpu = (m) => has(new RegExp(`${m}(?![0-9A-Z])`));
 
 const TIERS = {
-  cpu: [
-    // AM4/LGA1200 — в конце: подходят, только если плата уже выбрана под старый сокет
-    [has(/Ryzen 5 9600/), has(/Ryzen 5 7500F/), has(/Core Ultra 5 225/), has(/Core i5-14400/), has(/Ryzen 5 (8400F|7400F|7600)/), has(/Core i5-1[23]400/), has(/Ryzen 5 5600\b/), has(/Ryzen 5 5500\b/), has(/Core i5-1[01]400/), has(/Core i3-1[234]100/)],
-    [has(/Ryzen 7 9700X/), has(/Ryzen 7 7700\b/), has(/Core Ultra 7 265/), has(/Core Ultra 5 245/), has(/Core i7-14700/), has(/Ryzen 7 7700X/), has(/Core i5-14600/), has(/Ryzen 7 7800X3D/), has(/Ryzen 7 5700X/), has(/Core i5-1[01]600/)],
-    [has(/Ryzen 7 98\d0X3D/), has(/Ryzen 9 99\d0X3D/), has(/Core Ultra 9 285/), has(/Ryzen 9 9950X\b/), has(/Ryzen 9 9900X\b/), has(/Core Ultra 7 270K/), has(/Ryzen 9 79\d0X/), has(/Core i9-1[34]900/), has(/Ryzen 9 5950X/)],
-  ],
-  motherboard: [
-    [(p) => p.chipset === "B840", (p) => p.chipset === "A620", (p) => p.chipset === "H810", (p) => p.chipset === "H610", (p) => p.chipset === "A520"],
-    [(p) => p.chipset === "B850" && p.wifi, (p) => p.chipset === "B860" && p.wifi, (p) => p.chipset === "B850", (p) => p.chipset === "B860", (p) => p.chipset === "B650", (p) => p.chipset === "B760", (p) => p.chipset === "B550"],
-    [(p) => p.chipset === "X870E", (p) => p.chipset === "X870", (p) => p.chipset === "Z890", (p) => p.chipset === "B650E", (p) => p.chipset === "Z790"],
-  ],
-  ram: [
-    [ram(16, 2, "DDR5", 5600), ram(16, 1, "DDR5", 5600), ram(16, 0, "DDR5"), ram(16, 2, "DDR4", 3200), ram(16, 1, "DDR4", 3200)],
-    [ram(32, 2, "DDR5", 6000), ram(32, 2, "DDR5", 5600), ram(32, 0, "DDR5"), ram(32, 2, "DDR4", 3200), ram(32, 0, "DDR4")],
-    [ram(64, 2, "DDR5", 6000), ram(64, 0, "DDR5"), ram(64, 0, "DDR4")],
-  ],
-  gpu: [
-    [chip(/RTX 5060$/), chip(/RX 9060 XT/), chip(/RTX 5050/), chip(/RTX 3060$/), chip(/RTX 3050/)],
-    [(p) => /RTX 5060 Ti/.test(p.chip) && p.vram >= 16, chip(/RTX 5070$/), chip(/RX 9070$/), chip(/RTX 5060 Ti/)],
-    [chip(/RTX 5070 Ti/), chip(/RX 9070 XT/), chip(/RTX 5080/)],
-  ],
-  storage: [
-    [nvme(1000, 3000), nvme(500, 3000), nvme(512, 3000)],
-    [nvme(2000, 5000), nvme(1000, 6500), nvme(2000, 3000)],
-    [nvme(2000, 10000), nvme(4000, 6000), nvme(1000, 10000)],
-  ],
-  hdd: [
-    [(p) => p.cap === 2000 && p.rpm >= 7200, (p) => p.cap === 2000, (p) => p.cap === 1000],
-    [(p) => p.cap === 4000 && p.rpm >= 7200, (p) => p.cap === 4000],
-    [(p) => p.cap >= 8000, (p) => p.cap >= 6000],
-  ],
-  psu: [
-    [psu(650, 750, /Bronze/), psu(600, 750, /Gold/), psu(550, 750, /Bronze|Silver/)],
-    [psu(750, 850, /Gold/), psu(750, 850, /Platinum|Silver/)],
-    [psu(1000, 1300, /Platinum|Titanium/), psu(1000, 1300, /Gold/)],
-  ],
-  case: [
-    [(p) => p.form === "mATX" && p.fansIn >= 3 && p.front === "mesh", (p) => p.form === "mATX" && p.fansIn >= 3, (p) => p.form === "mATX" && p.window],
-    [(p) => p.form === "ATX" && p.fansIn >= 3 && p.front === "mesh", (p) => p.form === "ATX" && p.fansIn >= 3, (p) => p.form === "ATX" && p.window],
-    [(p) => p.aquarium && p.fansIn >= 4, (p) => p.aquarium && ["ATX", "EATX"].includes(p.form), (p) => p.form === "EATX" && p.fansIn >= 3],
-  ],
-  cooler: [
-    [(p) => p.type === "air" && p.towers === 1 && p.tdp >= 180 && p.tdp <= 240, (p) => p.type === "air" && p.towers === 1 && p.tdp >= 150],
-    [(p) => p.type === "air" && p.towers >= 2, (p) => p.type === "aio" && p.rad === 240, (p) => p.type === "air" && p.tdp >= 240],
-    [(p) => p.type === "aio" && p.rad === 360, (p) => p.type === "aio" && p.rad >= 280],
-  ],
+  // лестница по спросу заказчика; запасные правила — под уже выбранную плату другого сокета (AM4 / LGA1700 / LGA1851)
+  cpu: {
+    names: NAMES4,
+    rules: [
+      [cpu("Ryzen 5 5600"), cpu("Core i5-12400F"), cpu("Ryzen 5 8400F"), cpu("Ryzen 5 5500"), has(/Core i3-1[234]100F?/), has(/Core i5-1[01]400F?/)],
+      [cpu("Core i5-14400F"), cpu("Ryzen 5 7500F"), has(/Core i5-1[34]400/), cpu("Ryzen 7 5700X"), has(/Core Ultra 5 225/), cpu("Ryzen 5 9600X"), has(/Core i5-1[01]600/)],
+      [cpu("Ryzen 7 7700"), cpu("Ryzen 7 7700X"), has(/Core i5-14600K/), has(/Core Ultra 5 245/), cpu("Ryzen 7 9700X"), cpu("Ryzen 7 5800X"), has(/Core i5-1[23]600K/)],
+      [cpu("Ryzen 7 7800X3D"), cpu("Ryzen 5 5500X3D"), has(/Core i7-14700/), has(/Core Ultra 7 265/), has(/Core i7-1[23]700/)],
+    ],
+  },
+  gpu: {
+    names: NAMES4,
+    rules: [
+      [chip(/RTX 5060$/), chip(/RTX 3060$/), chip(/RTX 5050/), chip(/RTX 3050/)],
+      [(p) => /RTX 5060 Ti/.test(p.chip) && p.vram >= 16, chip(/RX 9060 XT/), chip(/RTX 5060 Ti/)],
+      [chip(/RTX 5070$/), chip(/RX 9070$/)],
+      [chip(/RTX 5070 Ti/), chip(/RX 9070 XT/)],
+    ],
+  },
+  motherboard: {
+    names: NAMES3,
+    rules: [
+      [chipset("A520", "H610", "A620", "H810", "B840")],
+      [chipset("B650", "B760", "B550", "B860")],
+      [chipset("B850", "X870", "Z790", "Z890", "B650E", "X870E")],
+    ],
+  },
+  ram: {
+    names: NAMES3,
+    rules: [
+      [ram(16, 2, "DDR5", 5600), ram(16, 2, "DDR4", 3200), ram(16, 0)],
+      [ram(32, 2, "DDR5", 6000), ram(32, 2, "DDR5"), ram(32, 2, "DDR4", 3200), ram(32, 0)],
+      [ram(64, 2, "DDR5"), ram(64, 0)],
+    ],
+  },
+  storage: {
+    names: NAMES3,
+    rules: [
+      [(p) => p.iface === "nvme" && p.cap === 1000 && p.read >= 3000 && p.read < 6500, (p) => p.iface === "nvme" && p.cap >= 500 && p.cap <= 512 && p.read >= 2000],
+      [(p) => p.iface === "nvme" && p.cap === 1000 && p.read >= 6500],
+      [(p) => p.iface === "nvme" && p.cap === 2000 && p.read >= 6500, (p) => p.iface === "nvme" && p.cap >= 2000],
+    ],
+  },
+  hdd: {
+    names: NAMES3,
+    rules: [
+      [(p) => p.cap === 1000 && DESKTOP_HDD.test(p.name), (p) => p.cap === 1000],
+      [(p) => p.cap === 2000 && DESKTOP_HDD.test(p.name), (p) => p.cap === 2000],
+      [(p) => p.cap === 4000 && DESKTOP_HDD.test(p.name), (p) => p.cap >= 4000],
+    ],
+  },
+  psu: {
+    names: NAMES3,
+    rules: [
+      [psu(600, 700, /Bronze|Gold/), psu(550, 700, /80\+/)],
+      [psu(750, 750, /Gold/), psu(750, 800, /Gold|Silver|Bronze/)],
+      [psu(850, 850, /Gold|Platinum/), psu(1000, 1000, /Gold|Platinum/), psu(850, 1300, /80\+/)],
+    ],
+  },
+  case: {
+    names: NAMES3,
+    rules: [
+      [(p) => p.band === 1 && p.fansIn >= 3, (p) => p.band === 1 && p.front === "mesh", (p) => p.band === 1],
+      [(p) => p.band === 2 && p.fansIn >= 3, (p) => p.band === 2],
+      [(p) => p.band === 3],
+    ],
+  },
+  cooler: {
+    names: NAMES3,
+    rules: [
+      [(p) => p.type === "air" && p.towers === 1 && p.tdp >= 180 && p.tdp <= 240, (p) => p.type === "air" && p.tdp >= 150],
+      [(p) => p.type === "air" && p.towers >= 2, (p) => p.type === "aio" && p.rad === 240],
+      [(p) => p.type === "aio" && p.rad === 360, (p) => p.type === "aio" && p.rad >= 280],
+    ],
+  },
 };
 
+// кто «лучше» при прочих равных: популярнее → свежее → (сортировка стабильная) раньше в каталоге, т.е. больше у поставщика
+const rank = (p) => p.pop ?? Infinity;
+const better = (step, a, b) => (rank(a) === rank(b) ? 0 : rank(a) < rank(b) ? -1 : 1) || fresh(step, b) - fresh(step, a);
+
 /**
- * Подборка по уровням из уже совместимых деталей (parts — результат filterOptions, в порядке каталога).
- * Возвращает до трёх { tier, name, part }; уровень, под который ничего не подошло, пропускается.
+ * Подборка по уровням из уже совместимых деталей (parts — в порядке каталога).
+ * Возвращает до 3–4 { tier, name, top, part }; уровень, под который ничего не подошло, пропускается.
  */
 export function topPicks(step, parts) {
-  const tiers = TIERS[step];
-  if (!tiers || parts.length < 6) return []; // короткий список и так виден целиком
+  const t = TIERS[step];
+  if (!t || parts.length < 6) return []; // короткий список и так виден целиком
   const used = new Set();
   const out = [];
-  tiers.forEach((rules, tier) => {
+  t.rules.forEach((rules, tier) => {
     for (const rule of rules) {
-      // внутри правила — самая свежая, при равенстве — первая по каталогу (наличие у поставщика)
       let best = null;
-      for (const p of parts) if (!used.has(p.id) && rule(p) && (!best || fresh(step, p) > fresh(step, best))) best = p;
+      for (const p of parts) if (!used.has(p.id) && rule(p) && (!best || better(step, p, best) < 0)) best = p;
       if (best) {
         used.add(best.id);
-        out.push({ tier, name: TIER_NAMES[tier], part: best });
+        out.push({ tier, name: t.names[tier], top: tier === t.rules.length - 1, part: best });
         return;
       }
     }
@@ -121,5 +160,11 @@ export function topPicks(step, parts) {
   return out;
 }
 
-/** Список по актуальности: свежие выше, внутри одной свежести — прежний порядок каталога (сортировка стабильная). */
-export const byFreshness = (step, parts) => [...parts].sort((a, b) => fresh(step, b) - fresh(step, a));
+// Выше потолка спроса магазина (заказчик: «самый топовый, который просят, — 7800X3D, выше не запрашивали»): такие
+// модели в списке идут после популярных, но раньше устаревших — даже если на Onliner они в топе (9800X3D там №1).
+const ABOVE_DEMAND = { cpu: has(/Ryzen 7 98\d0X3D|Ryzen 9|Core i9|Core Ultra 9|Core Ultra 7 270K/) };
+const group = (step, p) => (fresh(step, p) === 0 ? 2 : ABOVE_DEMAND[step]?.(p) ? 1 : 0);
+
+/** Порядок списка: популярные выше; выше потолка спроса — после них; устаревшее (fresh 0) — в конце.
+ *  Сортировка стабильная — равные остаются в порядке каталога. */
+export const byPopularity = (step, parts) => [...parts].sort((a, b) => group(step, a) - group(step, b) || better(step, a, b));
