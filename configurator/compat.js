@@ -1,73 +1,107 @@
-// Проверка совместимости — предварительная оценка на открытых характеристиках (см. content/components-facts.md).
+// Проверка совместимости — предварительная оценка на характеристиках из прайса и Onliner (см. content/components-facts.md).
 // Ключевая идея: несовместимые варианты вообще не показываются в списке выбора (filterOptions),
-// а не отображаются с предупреждением постфактум. checkCompat остаётся как защитный резерв
-// (например, пока не выбраны все детали) и для итоговой сводки.
-import { CATALOG, findPart, FORM_RANK } from "./data.js";
+// а не отображаются с предупреждением постфактум. Спорные случаи, которые решаются прошивкой BIOS или
+// настройкой (например, Ryzen 5000 на плате B450), не скрываются, а дают предупреждение в checkCompat.
+// Если какой-то характеристики у товара нет (не нашлась на Onliner) — эта проверка для него пропускается,
+// а не прячет товар: финальную комплектацию всё равно подтверждает консультант.
+import { CATALOG, findPart, FORM_RANK, FORM_LABEL } from "./data.js";
 
-const WATT_MARGIN_WITH_GPU = 120;
-const WATT_MARGIN_NO_GPU = 80;
+const SYSTEM_WATT = 100; // плата, память, диски, вентиляторы
 const WATT_SAFETY = 50; // если БП мощнее нужного меньше чем на столько — предупреждение, а не «ок»
 
-/** Сколько ватт нужно системе: TDP процессора + TDP видеокарты (если есть) + запас */
-export const computeNeededWatt = (cpuTdp, gpuTdp) => cpuTdp + (gpuTdp || 0) + (gpuTdp ? WATT_MARGIN_WITH_GPU : WATT_MARGIN_NO_GPU);
+/** Сколько ватт потребляет процессор под нагрузкой: у Intel — максимальный TDP (PL2), у AMD — PPT ≈ 1.35 × TDP. */
+export const cpuPower = (cpu) => (cpu ? (cpu.tdpMax || Math.round((cpu.tdp || 65) * (cpu.brand === "AMD" ? 1.35 : 1))) : 0);
+
+/** Сколько ватт нужно системе. Если у видеокарты есть рекомендация производителя по БП — берём большее. */
+export function computeNeededWatt(cpu, gpu) {
+  if (!cpu) return 0;
+  const raw = cpuPower(cpu) + (gpu?.tdp || 0) + SYSTEM_WATT;
+  const need = Math.max(raw, gpu?.psuRec || 0);
+  return Math.ceil(need / 50) * 50;
+}
 
 /** "error" — не хватает, "warning" — впритык, "ok" — с запасом */
 export const wattStatus = (psuWatt, neededWatt) => (psuWatt < neededWatt ? "error" : psuWatt < neededWatt + WATT_SAFETY ? "warning" : "ok");
 
+// ——— поддержка процессора чипсетом платы ———
+// "no" — не заработает (скрываем), "bios" — заработает с подходящей прошивкой платы (предупреждаем).
+// Ключи поколений (cpu.gen) проставляет tools/build-catalog.mjs по кодовому имени кристалла.
+const CHIPSET_RULES = [
+  // AM4
+  { re: /^(A520|B550)$/, no: ["bristol", "raven", "dali", "picasso"] },
+  { re: /^(X570)$/, no: ["bristol", "raven"] },
+  { re: /^(A320|B350|X370|B450|X470)$/, bios: ["matisse", "renoir", "cezanne", "vermeer", "bristol"] },
+  // LGA1200: 400-я серия не знает 11-е поколение
+  { re: /^(H410|B460|H470|Z490|Q470|W480)$/, no: ["rocket"] },
+  // LGA1700: 600-й серии для 13–14-го поколения нужна свежая прошивка
+  { re: /^(H610|B660|H670|Z690)$/, bios: ["raptor"] },
+  // LGA1851: обновлённые «Plus»-процессоры на 800-й серии — с новой прошивкой
+  { re: /^(H810|B860|Z890)$/, bios: ["arrow-r"] },
+];
+export function chipsetSupport(cpu, mb) {
+  if (!cpu?.gen || !mb?.chipset) return "ok";
+  for (const r of CHIPSET_RULES) {
+    if (!r.re.test(mb.chipset)) continue;
+    if (r.no?.includes(cpu.gen)) return "no";
+    if (r.bios?.includes(cpu.gen)) return "bios";
+  }
+  return "ok";
+}
+
+const caseFitsBoard = (c, mb) => (c.forms?.length ? c.forms.includes(mb.form) : FORM_RANK[c.form] == null || FORM_RANK[mb.form] == null || FORM_RANK[c.form] >= FORM_RANK[mb.form]);
+const coolerFitsCpu = (cl, cpu) => (!cl.sockets || cl.sockets.includes(cpu.socket)) && (!cl.tdp || !cpu.coolTdp || cl.tdp >= cpu.coolTdp);
+const coolerFitsCase = (cl, c) =>
+  cl.type === "aio" ? !c.rads?.length || !cl.rad || c.rads.includes(cl.rad) : !cl.height || !c.coolerMax || cl.height <= c.coolerMax;
+const gpuFitsCase = (g, c) => !g.len || !c.gpuMax || g.len <= c.gpuMax;
+const psuFitsCase = (p, c) => (!c.psuForms?.length || !p.form || c.psuForms.includes(p.form)) && (!p.len || !c.psuMaxLen || p.len <= c.psuMaxLen);
+
 /**
  * Подходит ли конкретная деталь `part` категории `step` к уже выбранным деталям в `sel`.
- * Не учитывает саму категорию step (сравнение только с ДРУГИМИ уже выбранными деталями) —
- * так можно фильтровать список вариантов для любого шага независимо от порядка выбора.
+ * `part === null` — вариант «без детали» для необязательного шага.
+ * Сравнение только с ДРУГИМИ уже выбранными деталями — так можно фильтровать список любого шага
+ * независимо от порядка выбора (фильтр двусторонний).
  */
 export function partFits(step, part, sel) {
-  const cpu = step === "cpu" ? null : findPart("cpu", sel.cpu);
-  const mb = step === "motherboard" ? null : findPart("motherboard", sel.motherboard);
-  const gpu = step === "gpu" ? null : findPart("gpu", sel.gpu);
+  const pick = (k) => (k === step ? part : findPart(k, sel[k]));
+  const cpu = pick("cpu");
+  const mb = pick("motherboard");
+  const ram = pick("ram");
+  const gpu = pick("gpu");
+  const ssd = pick("storage");
+  const hdd = pick("hdd");
+  const psu = pick("psu");
+  const c = pick("case");
+  const cl = pick("cooler");
 
-  if (step === "cpu" && mb && part.socket !== mb.socket) return false;
-  if (step === "motherboard" && cpu && part.socket !== cpu.socket) return false;
-
-  if (step === "ram" && mb && part.ram !== mb.ram) return false;
-
-  if (step === "gpu" && part === null) {
-    // «Без видеокарты» — только если у процессора есть встроенная графика
-    return !cpu || cpu.iGpu !== false;
+  if (part === null) {
+    if (step === "gpu") return !cpu || cpu.igpu !== false; // без видеокарты — только со встроенной графикой
+    if (step === "cooler") return !cpu || !!cpu.boxCooler; // «кулер из комплекта» — только у BOX-процессоров
+    return true;
   }
 
-  if (step === "case" && mb && FORM_RANK[part.form] < FORM_RANK[mb.form]) return false;
-  if (step === "motherboard" && sel.case) {
-    const c = findPart("case", sel.case);
-    if (c && FORM_RANK[c.form] < FORM_RANK[part.form]) return false;
+  // Каждая пара проверяется, только если в ней участвует текущий шаг — остальное уже проверено раньше.
+  const involves = (...keys) => keys.includes(step);
+  if (involves("cpu", "motherboard") && cpu && mb) {
+    if (cpu.socket !== mb.socket) return false;
+    if (chipsetSupport(cpu, mb) === "no") return false;
+    if (cpu.mem?.length && mb.mem && !cpu.mem.includes(mb.mem)) return false;
   }
-
-  if (step === "cooler") {
-    if (cpu && !part.sockets.includes(cpu.socket)) return false;
-    if (cpu && cpu.tdp > part.tdpMax) return false;
+  if (involves("ram", "motherboard") && ram && mb) {
+    if (ram.mem !== mb.mem) return false;
+    if (mb.slots && ram.sticks > mb.slots) return false;
   }
-  if (step === "cpu" && sel.cooler) {
-    const cl = findPart("cooler", sel.cooler);
-    if (cl && (!cl.sockets.includes(part.socket) || part.tdp > cl.tdpMax)) return false;
-  }
-
-  if (step === "psu") {
-    if (cpu) {
-      const needed = computeNeededWatt(cpu.tdp, gpu?.tdp);
-      if (part.watt < needed) return false;
-    }
-  }
-  if ((step === "cpu" || step === "gpu") && sel.psu) {
-    const psu = findPart("psu", sel.psu);
-    if (psu) {
-      const testCpu = step === "cpu" ? part : cpu;
-      const testGpuTdp = step === "gpu" ? part?.tdp : gpu?.tdp;
-      if (testCpu && psu.watt < computeNeededWatt(testCpu.tdp, testGpuTdp)) return false;
-    }
-  }
-
+  if (involves("storage", "motherboard") && ssd && mb && ssd.form === "m2" && mb.m2 === 0) return false;
+  if (involves("motherboard", "case") && mb && c && !caseFitsBoard(c, mb)) return false;
+  if (involves("gpu", "case") && gpu && c && !gpuFitsCase(gpu, c)) return false;
+  if (involves("hdd", "case") && hdd && c && c.bays35 === 0) return false;
+  if (involves("psu", "case") && psu && c && !psuFitsCase(psu, c)) return false;
+  if (involves("cooler", "cpu") && cl && cpu && !coolerFitsCpu(cl, cpu)) return false;
+  if (involves("cooler", "case") && cl && c && !coolerFitsCase(cl, c)) return false;
+  if (involves("psu", "cpu", "gpu") && psu && cpu && psu.watt < computeNeededWatt(cpu, gpu)) return false;
   return true;
 }
 
-/** Список вариантов шага `step`, совместимых с уже выбранными деталями. `null` в списке — вариант «без детали» (для gpu). */
+/** Список вариантов шага `step`, совместимых с уже выбранными деталями. */
 export function filterOptions(step, sel) {
   return CATALOG[step].filter((p) => partFits(step, p, sel));
 }
@@ -76,41 +110,60 @@ export function filterOptions(step, sel) {
 export const noPartAllowed = (step, sel) => partFits(step, null, sel);
 
 /**
- * Полная проверка уже сделанного выбора — резерв на случай гонок при смене более раннего шага.
- * В обычной работе интерфейса (через filterOptions) несовместимых комбинаций возникать не должно.
+ * Полная проверка выбора: ошибки (при обычной работе интерфейса возникать не должны — страховка)
+ * и предупреждения о спорных, но рабочих сочетаниях.
  */
 export function checkCompat(sel) {
-  const cpu = findPart("cpu", sel.cpu);
-  const mb = findPart("motherboard", sel.motherboard);
-  const ram = findPart("ram", sel.ram);
-  const gpu = findPart("gpu", sel.gpu);
-  const psu = findPart("psu", sel.psu);
-  const cooler = findPart("cooler", sel.cooler);
-  const caseP = findPart("case", sel.case);
+  const g = (k) => findPart(k, sel[k]);
+  const cpu = g("cpu");
+  const mb = g("motherboard");
+  const ram = g("ram");
+  const gpu = g("gpu");
+  const ssd = g("storage");
+  const hdd = g("hdd");
+  const psu = g("psu");
+  const c = g("case");
+  const cl = g("cooler");
   const issues = []; // { level: "error"|"warning", text, steps: [] }
+  const err = (text, steps) => issues.push({ level: "error", text, steps });
+  const warn = (text, steps) => issues.push({ level: "warning", text, steps });
 
-  if (cpu && mb && cpu.socket !== mb.socket) issues.push({ level: "error", text: `Процессор (${cpu.socket}) и плата (${mb.socket}) — разные сокеты.`, steps: ["cpu", "motherboard"] });
-  if (mb && ram && mb.ram !== ram.ram) issues.push({ level: "error", text: `Плата работает с ${mb.ram}, а память — ${ram.ram}.`, steps: ["motherboard", "ram"] });
-  if (cpu && !cpu.iGpu && !gpu) issues.push({ level: "error", text: "У этого процессора нет встроенной графики — нужна видеокарта.", steps: ["cpu", "gpu"] });
-  if (cooler && cpu && !cooler.sockets.includes(cpu.socket)) issues.push({ level: "error", text: `Кулер не поддерживает сокет ${cpu.socket}.`, steps: ["cooler", "cpu"] });
-  if (cooler && cpu && cpu.tdp > cooler.tdpMax) issues.push({ level: "warning", text: "Процессор горячее, чем рассчитан этот кулер.", steps: ["cooler", "cpu"] });
-  if (mb && caseP && FORM_RANK[caseP.form] < FORM_RANK[mb.form]) issues.push({ level: "error", text: `Плата форм-фактора ${mb.form} не влезет в корпус ${caseP.form}.`, steps: ["motherboard", "case"] });
+  if (cpu && mb) {
+    if (cpu.socket !== mb.socket) err(`Процессор (${cpu.socket}) и плата (${mb.socket}) — разные сокеты.`, ["cpu", "motherboard"]);
+    const cs = chipsetSupport(cpu, mb);
+    if (cs === "no") err(`Чипсет ${mb.chipset} не поддерживает этот процессор.`, ["cpu", "motherboard"]);
+    if (cs === "bios") warn(`Для этого процессора на плате с чипсетом ${mb.chipset} может понадобиться обновление BIOS — консультант проверит версию прошивки.`, ["cpu", "motherboard"]);
+    if (mb.chipset === "A620" && cpu.tdp >= 170) warn("На плате A620 процессор такого уровня может работать с ограничением мощности — лучше B650/B850 и выше.", ["cpu", "motherboard"]);
+  }
+  if (mb && ram) {
+    if (ram.mem !== mb.mem) err(`Плата работает с ${mb.mem}, а память — ${ram.mem}.`, ["motherboard", "ram"]);
+    else if (mb.slots && ram.sticks > mb.slots) err(`В комплекте памяти ${ram.sticks} модуля, а на плате всего ${mb.slots} слота.`, ["motherboard", "ram"]);
+  }
+  if (ssd && mb && ssd.form === "m2" && mb.m2 === 0) err("На плате нет слота M.2 для этого SSD.", ["storage", "motherboard"]);
+  if (cpu && cpu.igpu === false && !gpu) err("У этого процессора нет встроенной графики — нужна видеокарта.", ["cpu", "gpu"]);
+  if (cl && cpu && !coolerFitsCpu(cl, cpu)) err("Кулер не подходит к процессору (сокет или мощность).", ["cooler", "cpu"]);
+  if (!cl && cpu && !cpu.boxCooler && sel.cooler === null && isFilledAll(sel)) warn("Не выбрано охлаждение процессора.", ["cooler"]);
+  if (mb && c && !caseFitsBoard(c, mb)) err(`Плата ${FORM_LABEL[mb.form] || mb.form} не влезет в этот корпус.`, ["motherboard", "case"]);
+  if (gpu && c && !gpuFitsCase(gpu, c)) err(`Видеокарта длиной ${gpu.len} мм не влезет: в корпус — до ${c.gpuMax} мм.`, ["gpu", "case"]);
+  if (cl && c && !coolerFitsCase(cl, c))
+    err(cl.type === "aio" ? `Радиатор ${cl.rad} мм не встанет в этот корпус.` : `Кулер высотой ${cl.height} мм не влезет: в корпус — до ${c.coolerMax} мм.`, ["cooler", "case"]);
+  if (hdd && c && c.bays35 === 0) err("В корпусе нет отсека для 3.5\" жёсткого диска.", ["hdd", "case"]);
+  if (psu && c && !psuFitsCase(psu, c)) err("Блок питания не встанет в этот корпус (форм-фактор или длина).", ["psu", "case"]);
+  if (gpu && c && gpu.len && !c.gpuMax) warn("Для этого корпуса нет данных о максимальной длине видеокарты — консультант проверит, что всё влезет.", ["gpu", "case"]);
 
-  const neededWatt = cpu ? computeNeededWatt(cpu.tdp, gpu?.tdp) : 0;
+  const neededWatt = computeNeededWatt(cpu, gpu);
   if (psu && neededWatt) {
     const status = wattStatus(psu.watt, neededWatt);
-    if (status === "error") issues.push({ level: "error", text: `Блоку питания не хватит мощности: нужно от ${neededWatt} Вт, а этот — ${psu.watt} Вт.`, steps: ["psu"] });
-    else if (status === "warning") issues.push({ level: "warning", text: "Блок питания в притык по мощности — лучше взять с небольшим запасом.", steps: ["psu"] });
+    if (status === "error") err(`Блоку питания не хватит мощности: нужно от ${neededWatt} Вт, а этот — ${psu.watt} Вт.`, ["psu"]);
+    else if (status === "warning") warn("Блок питания впритык по мощности — лучше взять с небольшим запасом.", ["psu"]);
   }
 
   const errors = issues.filter((i) => i.level === "error");
   return { ok: errors.length === 0, issues, neededWatt };
 }
+const isFilledAll = (sel) => ["cpu", "motherboard", "ram", "storage", "psu", "case"].every((k) => sel[k]);
 
 /** Рекомендация блока питания под уже выбранные CPU/GPU (для подсказки в шаге PSU) */
 export function recommendedWatt(sel) {
-  const cpu = findPart("cpu", sel.cpu);
-  const gpu = findPart("gpu", sel.gpu);
-  if (!cpu) return null;
-  return computeNeededWatt(cpu.tdp, gpu?.tdp);
+  return computeNeededWatt(findPart("cpu", sel.cpu), findPart("gpu", sel.gpu)) || null;
 }

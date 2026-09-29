@@ -1,6 +1,6 @@
 // Сборка страницы «Конструктор ПК»: состояние выбора, рендер шагов/итога, совместимость, оплата частями, Telegram.
-import { CATALOG, STEPS, findPart, stockLabel, STOCK, priceTier, TIER_LABEL } from "./data.js";
-import { filterOptions, noPartAllowed, partFits, checkCompat } from "./compat.js";
+import { CATALOG, CATALOG_META, STEPS, FORM_LABEL, FORM_RANK, findPart, isRequired, loadCatalog, priceTier, TIER_LABEL } from "./data.js";
+import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt } from "./compat.js";
 import { splitPrice, INSTALLMENT_MONTHS, CREDIT_ANNUAL_RATE } from "./installment.js";
 import { UPSELL } from "./upsell.js";
 import { sourceLine, telegramUrl } from "../js/engine.js";
@@ -18,6 +18,7 @@ const el = (tag, cls, html) => {
 const sel = Object.fromEntries(STEPS.map((s) => [s.key, null]));
 const touched = {}; // отметить необязательные шаги, где явно выбрали «без детали» (сейчас — только gpu)
 let openStep = STEPS[0].key;
+let catalogReady = false;
 let installmentMonths = INSTALLMENT_MONTHS[0];
 
 // ——— появление блоков при прокрутке (.sr, стили — css/configurator.css) ———
@@ -95,25 +96,189 @@ tabs.build.addEventListener("click", () => selectTab("build"));
 tabs.ai.addEventListener("click", () => selectTab("ai"));
 
 // ——— шаги и карточки выбора ———
+// Каталог большой (сотни позиций в категории), поэтому варианты рисуются только у раскрытого шага,
+// порциями по PAGE, с поиском и быстрыми фильтрами-чипами (FACETS).
 const stepsEl = $("#steps");
 const stepEls = {};
+const PAGE = 12;
+const view = Object.fromEntries(STEPS.map((s) => [s.key, { q: "", facets: {}, limit: PAGE }]));
+
+const gb = (n) => (n >= 1000 ? `${+(n / 1000).toFixed(1)} ТБ` : `${n} ГБ`);
+const wattBand = (w) => (w < 600 ? "до 550 Вт" : w < 750 ? "600–700 Вт" : w < 900 ? "750–850 Вт" : "от 900 Вт");
+// Быстрые фильтры: у каждого шага 1–2 ряда чипов. Показываются, только если среди подходящих вариантов есть выбор.
+const FACETS = {
+  cpu: [{ key: "brand", get: (p) => p.brand }, { key: "socket", get: (p) => p.socket }],
+  motherboard: [{ key: "form", get: (p) => FORM_LABEL[p.form] || p.form }, { key: "mem", get: (p) => p.mem }],
+  ram: [{ key: "cap", get: (p) => gb(p.cap), sort: (p) => p.cap }, { key: "rgb", get: (p) => (p.rgb ? "С подсветкой" : null) }],
+  gpu: [{ key: "vendor", get: (p) => (p.vendor === "amd" ? "AMD Radeon" : p.vendor === "nvidia" ? "NVIDIA GeForce" : null) }, { key: "vram", get: (p) => (p.vram ? `${p.vram} ГБ` : null), sort: (p) => p.vram }],
+  storage: [{ key: "cap", get: (p) => gb(p.cap), sort: (p) => p.cap }, { key: "iface", get: (p) => (p.iface === "nvme" ? "NVMe M.2" : p.form === "2.5" ? 'SATA 2.5"' : "SATA M.2") }],
+  hdd: [{ key: "cap", get: (p) => gb(p.cap), sort: (p) => p.cap }],
+  psu: [{ key: "watt", get: (p) => wattBand(p.watt), sort: (p) => p.watt }, { key: "rating", get: (p) => p.rating }],
+  case: [{ key: "color", get: (p) => ({ white: "Белые", black: "Чёрные" })[p.color] || "Другие цвета" }, { key: "form", get: (p) => (p.form ? `до ${FORM_LABEL[p.form]}` : null), sort: (p) => FORM_RANK[p.form] }],
+  cooler: [{ key: "type", get: (p) => (p.type === "aio" ? "Жидкостные (СЖО)" : "Воздушные") }, { key: "color", get: (p) => (p.color === "white" ? "Белые" : null) }],
+};
+
+/** Короткая строка характеристик под названием варианта */
+function specLine(step, p) {
+  const bits = {
+    cpu: [p.socket, p.cores && `${p.cores} ядер`, p.tdp && `${p.tdp} Вт`, p.igpu === false ? "без графики" : "есть графика", p.boxCooler && "кулер в комплекте"],
+    motherboard: [p.chipset, FORM_LABEL[p.form], p.mem && `${p.slots || ""}×${p.mem}`.replace(/^×/, ""), p.m2 ? `${p.m2}×M.2` : null],
+    ram: [p.mem, p.cap && (p.sticks > 1 ? `${gb(p.cap)} (${p.sticks}×${gb(p.cap / p.sticks)})` : gb(p.cap)), p.mhz && `${p.mhz} МГц`, p.rgb && "подсветка"],
+    gpu: [p.vram && `${p.vram} ГБ`, p.len && `длина ${p.len} мм`, p.psuRec && `БП от ${p.psuRec} Вт`],
+    storage: [p.cap && gb(p.cap), p.iface === "nvme" ? "NVMe" : "SATA", p.form === "m2" ? "M.2" : '2.5"', p.read && `до ${p.read} МБ/с`],
+    hdd: [p.cap && gb(p.cap), p.rpm && `${p.rpm} об/мин`],
+    psu: [p.watt && `${p.watt} Вт`, p.rating, p.modular && "модульный"],
+    case: [p.form && `до ${FORM_LABEL[p.form]}`, p.gpuMax && `видеокарта до ${p.gpuMax} мм`, p.coolerMax && `кулер до ${p.coolerMax} мм`],
+    cooler: [p.type === "aio" ? `СЖО ${p.rad || ""} мм`.replace("  ", " ") : p.towers > 1 ? "двухбашенный" : p.lowProfile ? "низкопрофильный" : "башенный", p.tdp && `до ${p.tdp} Вт`, p.type !== "aio" && p.height && `высота ${p.height} мм`],
+  }[step];
+  return (bits || []).filter(Boolean).join(" · ");
+}
 
 function partMeta(step, part) {
   const tags = [];
-  if (part.demo) tags.push('<span class="tag tag--demo">Демо</span>');
-  else if (part.stock === STOCK.OUT) tags.push('<span class="tag tag--out">Нет в наличии</span>');
-  else if (part.stock === STOCK.LOW || part.stock === STOCK.ONE) tags.push(`<span class="tag tag--low">${stockLabel(part.stock)}</span>`);
-  if (step === "psu") tags.push(`<span class="tag">${part.watt} Вт</span>`);
-  if (step === "ram") tags.push(`<span class="tag">${part.ram}</span>`);
-  if (step === "cooler" && part.type === "aio") tags.push('<span class="tag">СЖО</span>');
+  if (step === "psu" && recommendedWatt(sel) && part.watt >= recommendedWatt(sel) + 150) tags.push('<span class="tag tag--ok">С запасом по мощности</span>');
   return tags.join("");
 }
 
-// Точной цены в списке нет намеренно — только относительный уровень (см. data.js: priceTier)
+// Уровень цены точками — только когда у товара есть цена (пока прайс без цен — не показываем)
 function tierDots(step, part) {
   const t = priceTier(step, part);
+  if (!t) return "";
   const dots = [1, 2, 3].map((i) => `<i class="${i <= t ? "on" : ""}"></i>`).join("");
   return `<span class="pc-tier" aria-label="${TIER_LABEL[t]}" title="${TIER_LABEL[t]}">${dots}</span>`;
+}
+
+const norm = (t) => t.toLowerCase().replace(/ё/g, "е");
+function visibleOptions(step, parts) {
+  const v = view[step];
+  const words = norm(v.q).split(/\s+/).filter(Boolean);
+  return parts.filter((p) => {
+    for (const f of FACETS[step] || []) if (v.facets[f.key] && f.get(p) !== v.facets[f.key]) return false;
+    if (!words.length) return true;
+    const hay = p._hay || (p._hay = norm(`${p.name} ${p.full} ${p.id}`));
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+function facetRows(step, parts) {
+  const rows = [];
+  for (const f of FACETS[step] || []) {
+    const counts = new Map();
+    for (const p of parts) {
+      const val = f.get(p);
+      if (val == null) continue;
+      const cur = counts.get(val) || { n: 0, order: f.sort ? f.sort(p) : val };
+      cur.n++;
+      counts.set(val, cur);
+    }
+    if (counts.size < 2 && !view[step].facets[f.key]) continue;
+    const vals = [...counts.entries()].sort((a, b) => (a[1].order > b[1].order ? 1 : a[1].order < b[1].order ? -1 : 0));
+    const row = el("div", "pc-facets");
+    for (const [val] of vals) {
+      const on = view[step].facets[f.key] === val;
+      const chip = el("button", "pc-chip" + (on ? " is-on" : ""));
+      chip.type = "button";
+      chip.textContent = val;
+      chip.setAttribute("aria-pressed", String(on));
+      chip.addEventListener("click", () => {
+        view[step].facets[f.key] = on ? undefined : val;
+        view[step].limit = PAGE;
+        renderSteps({ keepFocus: false });
+      });
+      row.appendChild(chip);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function optionButton(s, p) {
+  const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : ""));
+  opt.type = "button";
+  opt.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg></span>
+    <span class="pc-option__mid"><span class="pc-option__name"></span><span class="pc-option__spec"></span><span class="pc-option__meta">${partMeta(s.key, p)}</span></span>
+    ${tierDots(s.key, p)}
+    <span class="pc-option__check"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg></span>`;
+  opt.querySelector(".pc-option__name").textContent = p.name;
+  opt.querySelector(".pc-option__spec").textContent = specLine(s.key, p);
+  opt.addEventListener("click", () => choose(s.key, p.id));
+  return opt;
+}
+
+function renderStepBody(s) {
+  const body = el("div", "pc-step__body");
+  const inner = el("div", "pc-step__inner");
+  body.appendChild(inner);
+  if (openStep !== s.key) return body; // закрытые шаги — без вариантов (их сотни)
+  if (!catalogReady) {
+    inner.appendChild(el("p", "pc-empty", "Загружаем каталог комплектующих…"));
+    return body;
+  }
+  const all = filterOptions(s.key, sel);
+  const hiddenCount = CATALOG[s.key].length - all.length;
+  const v = view[s.key];
+
+  if (all.length > PAGE || v.q) {
+    const search = el("label", "pc-search", `<svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Поиск: модель, бренд или код" autocomplete="off" enterkeyhint="search">`);
+    const input = search.querySelector("input");
+    input.value = v.q;
+    input.setAttribute("aria-label", `Поиск: ${s.title.toLowerCase()}`);
+    input.addEventListener("input", () => {
+      v.q = input.value;
+      v.limit = PAGE;
+      renderList();
+    });
+    inner.appendChild(search);
+  }
+  const facetsWrap = el("div", "pc-facets-wrap");
+  inner.appendChild(facetsWrap);
+  const list = el("div", "pc-options");
+  inner.appendChild(list);
+  const foot = el("div", "pc-list-foot");
+  inner.appendChild(foot);
+
+  function renderList() {
+    facetsWrap.replaceChildren(...facetRows(s.key, all));
+    const shown = visibleOptions(s.key, all);
+    const items = [];
+    if (!isRequired(s.key, sel) && noPartAllowed(s.key, sel) && s.noneLabel && !v.q) {
+      const none = el("button", "pc-option" + (sel[s.key] === null && touched[s.key] ? " is-selected" : ""));
+      none.type = "button";
+      none.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg></span>
+        <span class="pc-option__mid"><span class="pc-option__name">${s.noneLabel}</span><span class="pc-option__spec">${s.noneHint}</span></span>
+        <span class="pc-option__check"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg></span>`;
+      none.addEventListener("click", () => choose(s.key, null));
+      items.push(none);
+    }
+    // выбранный вариант держим первым, даже если он дальше первой страницы
+    const selected = shown.find((p) => p.id === sel[s.key]);
+    const page = shown.filter((p) => p !== selected).slice(0, v.limit - (selected ? 1 : 0));
+    if (selected) items.push(optionButton(s, selected));
+    page.forEach((p) => items.push(optionButton(s, p)));
+    items.forEach((n, i) => n.style.setProperty("--oi", Math.min(i, 10)));
+    list.replaceChildren(...items);
+
+    foot.replaceChildren();
+    const rest = shown.length - Math.min(shown.length, v.limit);
+    if (rest > 0) {
+      const more = el("button", "ghost pc-more", `Показать ещё ${Math.min(rest, PAGE)} <small>· осталось ${rest}</small>`);
+      more.type = "button";
+      more.addEventListener("click", () => {
+        v.limit += PAGE;
+        renderList();
+      });
+      foot.appendChild(more);
+    }
+    if (all.length === 0 && !(!isRequired(s.key, sel) && noPartAllowed(s.key, sel))) {
+      foot.appendChild(el("p", "pc-empty", "Нет вариантов, подходящих к уже выбранным деталям — измените один из предыдущих шагов."));
+    } else if (shown.length === 0) {
+      foot.appendChild(el("p", "pc-empty", "По этому запросу ничего не нашлось — попробуйте иначе или сбросьте фильтры."));
+    } else if (hiddenCount > 0) {
+      foot.appendChild(el("p", "pc-empty", `Ещё ${hiddenCount} ${plural(hiddenCount)} скрыто — они не подходят к уже выбранным деталям.`));
+    }
+  }
+  renderList();
+  return body;
 }
 
 let justOpened = null;
@@ -130,45 +295,14 @@ function renderSteps() {
        <svg class="ico pc-step__chev" aria-hidden="true"><use href="#i-down"/></svg>`,
     );
     head.type = "button";
+    head.setAttribute("aria-expanded", String(openStep === s.key));
     head.addEventListener("click", () => {
       openStep = openStep === s.key ? null : s.key;
       justOpened = openStep; // варианты только что раскрытого шага выйдут лесенкой (см. .is-opening в CSS)
       renderSteps();
     });
     wrap.appendChild(head);
-
-    const body = el("div", "pc-step__body");
-    const list = el("div", "pc-options");
-    const parts = filterOptions(s.key, sel);
-    const hiddenCount = CATALOG[s.key].length - parts.length;
-
-    if (!s.required && noPartAllowed(s.key, sel)) {
-      const none = el("button", "pc-option" + (sel[s.key] === null && touched[s.key] ? " is-selected" : ""));
-      none.type = "button";
-      none.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg></span>
-        <span class="pc-option__mid"><span class="pc-option__name">Без видеокарты</span><span class="pc-option__meta"><span class="tag">Хватит встроенной графики</span></span></span>
-        <span class="pc-option__check"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg></span>`;
-      none.addEventListener("click", () => choose(s.key, null));
-      list.appendChild(none);
-    }
-    parts.forEach((p) => {
-      const opt = el("button", "pc-option" + (sel[s.key] === p.id ? " is-selected" : ""));
-      opt.type = "button";
-      opt.innerHTML = `<span class="pc-option__ico"><svg class="ico" aria-hidden="true"><use href="#i-${s.icon}"/></svg></span>
-        <span class="pc-option__mid"><span class="pc-option__name">${p.name}</span><span class="pc-option__meta">${partMeta(s.key, p)}</span></span>
-        ${tierDots(s.key, p)}
-        <span class="pc-option__check"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg></span>`;
-      opt.addEventListener("click", () => choose(s.key, p.id));
-      list.appendChild(opt);
-    });
-    if (parts.length === 0 && !(!s.required && noPartAllowed(s.key, sel))) {
-      list.appendChild(el("p", "pc-empty", "Нет вариантов, подходящих к уже выбранным деталям — измените один из предыдущих шагов."));
-    } else if (hiddenCount > 0) {
-      list.appendChild(el("p", "pc-empty", `Ещё ${hiddenCount} ${plural(hiddenCount)} скрыто — они не подходят к уже выбранным деталям.`));
-    }
-    [...list.children].forEach((n, i) => n.style.setProperty("--oi", Math.min(i, 10)));
-    body.appendChild(list);
-    wrap.appendChild(body);
+    wrap.appendChild(renderStepBody(s));
     if (!revealedSteps.has(s.key)) {
       if (stepEls[s.key]) srIO?.unobserve(stepEls[s.key]);
       sr(wrap);
@@ -192,26 +326,31 @@ function plural(n) {
 function syncStepTexts() {
   STEPS.forEach((s) => {
     const wrap = stepEls[s.key];
+    const req = isRequired(s.key, sel);
     wrap.classList.toggle("is-open", openStep === s.key);
-    wrap.classList.toggle("is-done", !!sel[s.key] || (!s.required && touched[s.key]));
+    wrap.classList.toggle("is-done", !!sel[s.key] || (!req && !!touched[s.key]));
     const part = findPart(s.key, sel[s.key]);
-    $('[data-role="subtitle"]', wrap).textContent = part ? part.name : s.required ? "Не выбрано" : "Можно пропустить";
+    $('[data-role="subtitle"]', wrap).textContent = part ? part.name : !req && touched[s.key] && s.noneLabel ? s.noneLabel : req ? "Не выбрано" : "Можно пропустить";
     $('[data-role="badge"]', wrap).textContent = part ? tierWord(s.key, part) : "";
   });
 }
-const tierWord = (step, part) => ({ 1: "Начальный", 2: "Средний", 3: "Топ" }[priceTier(step, part)]);
+const tierWord = (step, part) => ({ 1: "Начальный", 2: "Средний", 3: "Топ" })[priceTier(step, part)] || "";
 
 function choose(step, id) {
   sel[step] = id;
   touched[step] = true;
   scene.set(step, findPart(step, id));
   reconcile(step);
+  // следующий ещё не заполненный шаг
   const idx = STEPS.findIndex((s) => s.key === step);
-  openStep = STEPS[idx + 1]?.key ?? null;
+  const next = STEPS.slice(idx + 1).find((s) => !sel[s.key] && !touched[s.key]) || null;
+  openStep = next?.key ?? null;
   justOpened = openStep;
   renderSteps();
   renderCompat();
   renderSummary();
+  // на телефоне — подвести к следующему шагу, чтобы не листать вручную
+  if (openStep && motionOK) requestAnimationFrame(() => stepEls[openStep]?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
 }
 
 // Выбор одной детали иногда делает несовместимой уже выбранную деталь ДРУГОЙ категории
@@ -223,21 +362,16 @@ function reconcile(justChosen) {
     let changed = false;
     for (const s of STEPS) {
       if (s.key === justChosen) continue;
-      if (s.key === "gpu") {
-        if (sel.gpu === null && touched.gpu && !noPartAllowed("gpu", sel)) {
-          touched.gpu = false;
-          changed = true;
-          cleared.push(s.title);
-        } else if (sel.gpu !== null && !partFits("gpu", findPart("gpu", sel.gpu), sel)) {
-          sel.gpu = null;
-          touched.gpu = false;
-          scene.set("gpu", null);
+      if (sel[s.key] === null) {
+        // явно выбранное «без детали» перестало быть допустимым (например, взяли процессор без графики)
+        if (touched[s.key] && s.noneLabel && !noPartAllowed(s.key, sel)) {
+          touched[s.key] = false;
           changed = true;
           cleared.push(s.title);
         }
         continue;
       }
-      if (sel[s.key] !== null && !partFits(s.key, findPart(s.key, sel[s.key]), sel)) {
+      if (!partFits(s.key, findPart(s.key, sel[s.key]), sel)) {
         sel[s.key] = null;
         delete touched[s.key];
         scene.set(s.key, null);
@@ -280,6 +414,7 @@ const installmentResult = $("#installmentResult");
 const installmentNote = $("#installmentNote");
 const sendBtn = $("#pcSend");
 const upsellBox = $("#upsell");
+const totalNote = $("#summaryNote");
 
 INSTALLMENT_MONTHS.forEach((m) => {
   const b = el("button", "installment__tab" + (m === installmentMonths ? " is-active" : ""), `${m} мес.`);
@@ -291,14 +426,23 @@ INSTALLMENT_MONTHS.forEach((m) => {
   installmentTabs.appendChild(b);
 });
 
-function buildMessage(total, compat) {
+// Итог считаем только если у всех выбранных деталей есть цена; пока прайс без цен — «по запросу».
+function totals() {
+  const parts = STEPS.map((s) => findPart(s.key, sel[s.key])).filter(Boolean);
+  const priced = parts.length > 0 && parts.every((p) => p.price != null);
+  return { parts, priced, total: priced ? Math.round(parts.reduce((a, p) => a + p.price, 0) * 100) / 100 : null };
+}
+
+function buildMessage(t, compat) {
   const lines = ["Здравствуйте! Собрал ПК в конструкторе на сайте:"];
   STEPS.forEach((s) => {
     const part = findPart(s.key, sel[s.key]);
-    if (part) lines.push(`— ${s.title}: ${part.name}`);
+    if (part) lines.push(`— ${s.title}: ${part.full || part.name} (код ${part.id})`);
+    else if (touched[s.key] && s.noneLabel && !isRequired(s.key, sel)) lines.push(`— ${s.title}: ${s.noneLabel.toLowerCase()}`);
   });
-  if (!STEPS.some((s) => findPart(s.key, sel[s.key]))) lines.push("(детали пока не выбраны)");
-  lines.push(`Итого: ${total} BYN (ориентировочно)`);
+  if (!t.parts.length) lines.push("(детали пока не выбраны)");
+  else if (t.priced) lines.push(`Итого: ${t.total} BYN (ориентировочно)`);
+  else lines.push("Подскажите, пожалуйста, итоговую цену и наличие.");
   if (!compat.ok) lines.push("Есть предупреждения о совместимости — прошу проверить.");
   const src = sourceLine();
   if (src) lines.push(src);
@@ -306,47 +450,56 @@ function buildMessage(total, compat) {
 }
 
 let shownRows = new Set();
-let shownTotal = 0;
+let shownTotal = null;
 function renderSummary() {
-  const parts = STEPS.map((s) => ({ step: s, part: findPart(s.key, sel[s.key]) }));
+  const t = totals();
   const rowKeys = new Set();
   rowsEl.replaceChildren(
-    ...parts
+    ...STEPS.map((s) => ({ step: s, part: findPart(s.key, sel[s.key]) }))
       .filter((x) => x.part)
       .map((x) => {
         const key = `${x.step.key}:${x.part.id}`;
         rowKeys.add(key);
         const li = el("li", shownRows.has(key) ? "" : "is-new"); // новая/сменённая деталь «вписывается» в сводку
-        li.innerHTML = `<span class="k">${x.step.title}</span><span class="v">${x.part.price} BYN${x.part.demo ? "<small>демо-цена</small>" : ""}</span>`;
+        li.innerHTML = `<span class="k"></span><span class="v"></span>`;
+        li.querySelector(".k").textContent = x.step.title;
+        const v = li.querySelector(".v");
+        if (x.part.price != null) v.textContent = `${x.part.price} BYN`;
+        else {
+          v.classList.add("v--name");
+          v.textContent = x.part.name;
+        }
         return li;
       }),
   );
-  const total = parts.reduce((sum, x) => sum + (x.part ? x.part.price : 0), 0);
-  totalEl.textContent = `${total} BYN`;
+  totalEl.textContent = !t.parts.length ? "0 BYN" : t.priced ? `${t.total} BYN` : "По запросу";
+  totalEl.classList.toggle("is-ask", t.parts.length > 0 && !t.priced);
+  totalNote.hidden = !(t.parts.length > 0 && !t.priced);
   shownRows = rowKeys;
-  if (total !== shownTotal && motionOK) {
-    // сумма изменилась — короткая вспышка (перезапуск CSS-анимации)
+  const key = t.priced ? t.total : t.parts.length;
+  if (key !== shownTotal && motionOK && t.parts.length) {
+    // итог изменился — короткая вспышка (перезапуск CSS-анимации)
     totalEl.classList.remove("is-bump");
     void totalEl.offsetWidth;
     totalEl.classList.add("is-bump");
   }
-  shownTotal = total;
+  shownTotal = key;
 
   const compat = checkCompat(sel);
-  installmentBox.hidden = total === 0;
-  if (total > 0) {
+  installmentBox.hidden = !t.priced;
+  if (t.priced) {
     [...installmentTabs.children].forEach((b, i) => b.classList.toggle("is-active", INSTALLMENT_MONTHS[i] === installmentMonths));
-    const { perMonth, overpay } = splitPrice(total, installmentMonths);
+    const { perMonth, overpay } = splitPrice(t.total, installmentMonths);
     installmentResult.textContent = `≈ ${perMonth} BYN / мес.`;
     installmentNote.textContent = `Переплата за весь срок — ≈ ${overpay} BYN. Это кредит, ставка ${(CREDIT_ANNUAL_RATE * 100).toFixed(2)}% годовых; точные условия — у банка-партнёра.`;
   }
 
-  const message = buildMessage(total, compat);
+  const message = buildMessage(t, compat);
   sendBtn.href = telegramUrl(message);
-  sendBtn.querySelector("span").textContent = total === 0 ? "Написать консультанту" : !compat.ok ? "Отправить (есть предупреждения)" : "Отправить консультанту в Telegram";
+  sendBtn.querySelector("span").textContent = !t.parts.length ? "Написать консультанту" : !compat.ok ? "Отправить (есть предупреждения)" : t.priced ? "Отправить консультанту в Telegram" : "Узнать цену у консультанта";
   sendBtn.dataset.message = message;
 
-  const requiredFilled = STEPS.filter((s) => s.required).every((s) => sel[s.key]);
+  const requiredFilled = STEPS.filter((s) => isRequired(s.key, sel)).every((s) => sel[s.key]);
   upsellBox.hidden = !requiredFilled;
 }
 
@@ -364,6 +517,7 @@ $("#pcReset").addEventListener("click", () => {
   STEPS.forEach((s) => {
     sel[s.key] = null;
     delete touched[s.key];
+    view[s.key] = { q: "", facets: {}, limit: PAGE };
     scene.set(s.key, null);
   });
   openStep = STEPS[0].key;
@@ -429,3 +583,12 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
 renderSteps();
 renderCompat();
 renderSummary();
+loadCatalog()
+  .then(() => {
+    catalogReady = true;
+    renderSteps();
+  })
+  .catch((e) => {
+    console.warn("Каталог не загрузился:", e);
+    stepsEl.prepend(el("p", "pc-empty", "Не удалось загрузить каталог — обновите страницу или напишите консультанту."));
+  });

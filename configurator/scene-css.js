@@ -13,6 +13,7 @@ const LAYOUT = {
   cpu: { x: 34, y: -18, z: -15 },
   ram: { x: 78, y: -50, z: 15 },
   storage: { x: -78, y: -66, z: 45 },
+  hdd: { x: 78, y: 70, z: 45 },
   gpu: { x: 0, y: 56, z: 75, scale: 1.4 },
 };
 
