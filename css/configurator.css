@@ -156,6 +156,7 @@
 .pc-summary__rows li.is-extra .k{color:var(--lime)}
 .pc-summary__rows li.is-name .v--name{font-weight:500;color:var(--text);text-align:left;line-height:1.35;overflow-wrap:anywhere}
 .pc-summary__total strong.is-ask{font-size:22px}
+.pc-summary__total strong.is-empty{font-size:22px;color:var(--muted);text-shadow:none}
 .pc-summary__note{margin-top:8px;font-size:12px;line-height:1.45;color:var(--muted)}
 @media (hover:hover) and (pointer:fine){.pc-chip:hover{border-color:rgba(185,255,1,.4);color:var(--text)}}
 .pc-options{display:grid;gap:10px;padding:0 16px 12px}
@@ -213,7 +214,10 @@
 .installment__note{margin:0;font-size:11px;line-height:1.4;color:var(--muted)}
 .installment__note a{color:var(--muted);text-decoration:underline}
 .pc-send{width:100%;margin-top:18px}
-.pc-reset{width:100%;margin-top:8px}
+.pc-summary__actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.pc-summary__actions .ghost{min-width:0;padding:0 10px}
+.pc-summary__actions .ico{width:16px;height:16px;flex:none;color:var(--muted);transition:color .2s,transform .45s var(--spring)}
+.pc-share:disabled{opacity:.45;cursor:default}
 
 /* Апсейл */
 .pc-upsell{margin-top:44px;text-align:center}
@@ -456,4 +460,82 @@ html.has-dialog{overflow:hidden}
   .pc-picks{padding:10px 8px;margin:0 -4px}
   .pc-picks .pc-option{padding:11px 12px}
   .pc-picks .pc-option__ico{display:none}
+}
+
+/* ——— Аудит конструктора 29.09.2026: сохранение/ссылка, мощность БП, профиль сборки, подсказки фильтра ——— */
+/* Сцена: подпись, пока ничего не выбрано, и короткая метка «+ деталь» */
+.scene__empty{position:absolute;left:50%;bottom:54px;z-index:1;width:min(88%,340px);margin:0;padding:9px 14px;border-radius:14px;background:rgba(7,8,13,.62);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid var(--line-2);font-size:12.5px;line-height:1.4;color:var(--muted);text-align:center;transform:translateX(-50%);pointer-events:none;opacity:0;transition:opacity .5s}
+.scene[data-scene-ready].is-empty .scene__empty{opacity:1;transition-delay:.8s}
+.scene__tag{position:absolute;left:12px;top:12px;z-index:1;display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);margin:0;padding:6px 12px 6px 6px;border-radius:999px;background:rgba(7,8,13,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(185,255,1,.35);font-size:12px;color:var(--muted);white-space:nowrap;pointer-events:none;opacity:0;transform:translateY(-8px);transition:opacity .35s,transform .45s var(--spring)}
+.scene__tag b{display:flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;border-radius:50%;background:var(--lime);color:#0a0f00;font:800 14px/1 var(--font-b)}
+.scene__tag span{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-weight:600}
+.scene__tag.is-on{opacity:1;transform:none}
+
+/* Мощность блока питания (в панели совместимости) */
+.power{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.power__row{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.power__row span:nth-child(2){flex:1;min-width:0}
+.power__row b{font:800 15px/1 var(--font-h);color:var(--text);font-variant-numeric:tabular-nums}
+.power__ico{display:flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;border-radius:50%;background:rgba(34,211,238,.13);color:var(--cyan)}
+.power__ico .ico{width:17px;height:17px}
+.power__bar{position:relative;height:6px;margin:10px 0 0 42px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.power.is-none .power__bar{display:none}
+.power__bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--cyan),var(--lime));box-shadow:0 0 10px rgba(34,211,238,.5);transition:width .8s var(--spring)}
+.power.is-warning .power__bar i{background:linear-gradient(90deg,#facc15,#fb923c)}
+.power.is-error .power__bar i{background:#f87171}
+.power__text{margin:6px 0 0 42px;font-size:12px;line-height:1.4;color:var(--muted)}
+.power.is-ok .power__text{color:#c6f77a}
+.power.is-warning .power__text{color:#ffd98a}
+.power.is-error .power__text{color:#ffb3ab}
+
+/* Подсказка над списком: по чему уже отфильтровано */
+.pc-hint{display:flex;align-items:flex-start;gap:8px;margin:0 16px 10px;padding:9px 12px;border-radius:12px;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.2);font-size:12.5px;line-height:1.4;color:var(--muted)}
+.pc-hint .ico{flex:none;width:15px;height:15px;margin-top:1px;color:var(--cyan)}
+.pc-hint b{color:var(--text);font-weight:600}
+
+/* Сводка: шапка с кнопкой «Смотреть в 3D» (телефон/планшет), профиль сборки, строки-кнопки, доверие */
+.pc-summary__head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pc-summary__3d{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(185,255,1,.35);background:rgba(185,255,1,.08);color:#eaffb0;font:700 12px/1 var(--font-b);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pc-summary__3d .ico{width:15px;height:15px;color:var(--lime)}
+@media (min-width:900px){.pc-summary__3d{display:none}}
+.pc-profile{display:flex;align-items:center;gap:9px;width:100%;margin-top:12px;padding:10px 12px;border-radius:14px;border:1px solid rgba(34,211,238,.3);background:linear-gradient(90deg,rgba(34,211,238,.13),rgba(185,255,1,.05));color:var(--text);font:600 13px/1.3 var(--font-b);text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;animation:row-in .55s var(--ease) backwards;transition:border-color .2s,background .2s}
+.pc-profile:disabled{cursor:default}
+.pc-profile .ico{flex:none;width:19px;height:19px;color:var(--cyan)}
+.pc-profile span{flex:1;min-width:0}
+.pc-profile small{flex:none;font-size:11.5px;font-weight:800;color:var(--cyan)}
+.pc-sumrow{position:relative;flex:1;display:flex;justify-content:space-between;gap:10px;min-width:0;margin:-4px -8px;padding:4px 30px 4px 8px;border:0;border-radius:10px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .2s}
+.is-name>.pc-sumrow{flex-direction:column;gap:3px}
+.pc-sumrow__edit{position:absolute;right:8px;top:50%;width:15px;height:15px;margin-top:-7.5px;color:var(--muted);opacity:.45;transition:opacity .2s,color .2s,transform .3s var(--spring)}
+.pc-sumrow:active{background:rgba(255,255,255,.05)}
+.pc-trust{display:grid;gap:7px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+.pc-trust li{display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.35;color:var(--muted)}
+.pc-trust .ico{flex:none;width:16px;height:16px;color:var(--lime);opacity:.85}
+
+/* Тост с действием («Вернуть» после «Начать заново») */
+.toast.has-action{display:flex;align-items:center;gap:12px;text-align:left}
+.toast.has-action.is-on{pointer-events:auto}
+.toast__act{flex:none;min-height:34px;padding:0 14px;border-radius:10px;border:1px solid rgba(185,255,1,.5);background:rgba(185,255,1,.14);color:var(--lime);font:700 13px/1 var(--font-b);cursor:pointer}
+
+@media (hover:hover) and (pointer:fine){
+  .pc-sumrow:hover{background:rgba(255,255,255,.045)}
+  .pc-sumrow:hover .pc-sumrow__edit{opacity:1;color:var(--lime);transform:rotate(-8deg)}
+  .pc-profile:not(:disabled):hover{border-color:rgba(34,211,238,.6)}
+  .pc-summary__actions .ghost:not(:disabled):hover .ico{color:var(--lime)}
+  .pc-reset:hover .ico{transform:rotate(-120deg)}
+  .toast__act:hover{background:rgba(185,255,1,.24)}
+}
+@media (prefers-reduced-motion:reduce){
+  .scene__tag,.power__bar i,.pc-sumrow__edit,.pc-summary__actions .ico{transition:none}
+  .pc-profile{animation:none}
+}
+/* узкие телефоны: шапка сводки и кнопки в одну строку, у вариантов больше места под название и характеристики */
+.pc-summary__head h2,.pc-summary__3d,.pc-summary__actions .ghost{white-space:nowrap}
+@media (max-width:419.98px){
+  .pc-summary{padding:18px 16px}
+  .pc-summary__3d{padding:0 10px}
+  .pc-summary__actions .ghost{gap:5px;font-size:12.5px}
+  .pc-summary__actions .ico{display:none}
+  .pc-send{font-size:15px}
+  .pc-options .pc-option__ico{display:none}
+  .pc-option{padding:12px}
 }

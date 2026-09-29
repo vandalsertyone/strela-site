@@ -1,9 +1,9 @@
 // Сборка страницы «Конструктор ПК»: состояние выбора, рендер шагов/итога, совместимость, оплата частями, Telegram.
 import { CATALOG, CATALOG_META, STEPS, FORM_LABEL, FORM_RANK, findPart, isRequired, loadCatalog, priceTier, TIER_LABEL } from "./data.js";
-import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt } from "./compat.js";
+import { filterOptions, noPartAllowed, partFits, checkCompat, recommendedWatt, wattStatus } from "./compat.js";
 import { splitPrice, INSTALLMENT_MONTHS, CREDIT_ANNUAL_RATE } from "./installment.js";
 import { UPSELL } from "./upsell.js";
-import { estimateFps, fpsLevel, RESOLUTIONS } from "./fps.js";
+import { estimateFps, fpsLevel, gpuBaseFps, RESOLUTIONS } from "./fps.js";
 import { topPicks, byPopularity } from "./picks.js";
 import { sourceLine, telegramUrl } from "../js/engine.js";
 import { createScene } from "./scene.js";
@@ -159,6 +159,31 @@ function coresWord(n) {
   return "ядер";
 }
 
+// Подсказка над списком: по каким уже выбранным деталям отфильтрован шаг (видно, что конструктор «думает»)
+function stepHint(step) {
+  const cpu = findPart("cpu", sel.cpu);
+  const mb = findPart("motherboard", sel.motherboard);
+  const gpu = findPart("gpu", sel.gpu);
+  const cl = findPart("cooler", sel.cooler);
+  const need = recommendedWatt(sel);
+  const mem = mb?.mem || (cpu?.mem?.length === 1 ? cpu.mem[0] : null);
+  const bits = {
+    motherboard: [cpu && `сокет ${cpu.socket}`, sel.ram && findPart("ram", sel.ram).mem],
+    ram: [mem && `только ${mem}`, mb?.slots && `до ${mb.slots} модулей`],
+    cooler: [cpu && `сокет ${cpu.socket}`, cpu?.coolTdp && `отводят от ${cpu.coolTdp} Вт`],
+    psu: [need && `от ${need} Вт под ваши процессор и видеокарту`],
+    case: [mb && `плата ${FORM_LABEL[mb.form] || mb.form}`, gpu?.len && `видеокарта ${gpu.len} мм`, cl?.type === "air" && cl.height && `кулер ${cl.height} мм`, cl?.type === "aio" && cl.rad && `радиатор ${cl.rad} мм`],
+    gpu: [sel.case && findPart("case", sel.case).gpuMax && `длина до ${findPart("case", sel.case).gpuMax} мм`],
+    cpu: [mb && `сокет ${mb.socket}`],
+  }[step];
+  const list = (bits || []).filter(Boolean);
+  if (!list.length) return null;
+  const txt = step === "case" ? `поместятся ${list.join(", ")}` : list.join(" · ");
+  const p = el("p", "pc-hint", `<svg class="ico" aria-hidden="true"><use href="#i-filter"/></svg><span><b>Подобрано под вашу сборку:</b> </span>`);
+  p.querySelector("span").append(txt);
+  return p;
+}
+
 function partMeta(step, part) {
   const tags = [];
   if (step === "psu" && recommendedWatt(sel) && part.watt >= recommendedWatt(sel) + 150) tags.push('<span class="tag tag--ok">С запасом по мощности</span>');
@@ -256,6 +281,8 @@ function renderStepBody(s) {
     });
     inner.appendChild(search);
   }
+  const hint = stepHint(s.key);
+  if (hint) inner.appendChild(hint);
   const facetsWrap = el("div", "pc-facets-wrap");
   inner.appendChild(facetsWrap);
   const list = el("div", "pc-options");
@@ -378,6 +405,7 @@ function choose(step, id) {
   sel[step] = id;
   touched[step] = true;
   scene.set(step, findPart(step, id));
+  sceneTag(step, findPart(step, id));
   reconcile(step);
   // следующий ещё не заполненный шаг
   const idx = STEPS.findIndex((s) => s.key === step);
@@ -453,7 +481,28 @@ function renderCompat() {
     li.querySelector("span").textContent = iss.text;
     compatList.appendChild(li);
   });
+  renderPower(r.neededWatt);
   return r;
+}
+
+// Рекомендуемая мощность блока питания: полоска «сколько от выбранного БП занимает рекомендация»
+const powerBox = $("#power");
+function renderPower(need) {
+  powerBox.hidden = !need;
+  if (!need) return;
+  const psu = findPart("psu", sel.psu);
+  $("#powerNeed").textContent = psu ? `${psu.watt} Вт` : `от ${need} Вт`;
+  $("#powerLabel").textContent = psu ? "Блок питания" : "Нужен блок питания";
+  const st = psu ? wattStatus(psu.watt, need) : "none";
+  powerBox.className = `power is-${st}`;
+  $("#powerFill").style.width = psu ? `${Math.min(100, Math.round((need / psu.watt) * 100))}%` : "0%";
+  $("#powerText").textContent = !psu
+    ? "Считаем по процессору и видеокарте с запасом. Слабые блоки питания мы уже убрали из списка."
+    : st === "ok"
+      ? `Рекомендуем от ${need} Вт — запас ${psu.watt - need} Вт${psu.watt - need >= 200 ? ", хватит и на будущий апгрейд" : ""}.`
+      : st === "warning"
+        ? `Рекомендуем от ${need} Вт — этот блок впритык, лучше взять с запасом.`
+        : `Нужно от ${need} Вт — этого блока не хватит.`;
 }
 
 // ——— итог, оплата частями, отправка ———
@@ -495,6 +544,8 @@ function buildMessage(t, compat) {
   if (!t.parts.length) lines.push("(детали пока не выбраны)");
   else if (t.priced) lines.push(`Итого: ${t.total} BYN (ориентировочно)`);
   else lines.push("Подскажите, пожалуйста, итоговую цену и наличие.");
+  const url = t.parts.length ? shareUrl() : "";
+  if (url) lines.push(`Сборка на сайте: ${url}`);
   if (!compat.ok) lines.push("Есть предупреждения о совместимости — прошу проверить.");
   const src = sourceLine();
   if (src) lines.push(src);
@@ -513,8 +564,11 @@ function renderSummary() {
         const key = `${x.step.key}:${x.part.id}`;
         rowKeys.add(key);
         const li = el("li", shownRows.has(key) ? "" : "is-new"); // новая/сменённая деталь «вписывается» в сводку
-        li.innerHTML = `<span class="k"></span><span class="v"></span>`;
+        // вся строка — кнопка: раскрывает шаг, чтобы поменять деталь
+        li.innerHTML = `<button class="pc-sumrow" type="button"><span class="k"></span><span class="v"></span><svg class="ico pc-sumrow__edit" aria-hidden="true"><use href="#i-edit"/></svg></button>`;
         li.querySelector(".k").textContent = x.step.title;
+        li.querySelector("button").setAttribute("aria-label", `${x.step.title}: ${x.part.name} — изменить`);
+        li.querySelector("button").addEventListener("click", () => editStep(x.step.key));
         const v = li.querySelector(".v");
         if (x.part.price != null) v.textContent = `${x.part.price} BYN`;
         else {
@@ -529,8 +583,9 @@ function renderSummary() {
   );
   summaryEmpty.hidden = t.parts.length > 0 || extras.size > 0;
   renderProgress();
-  totalEl.textContent = !t.parts.length ? "0 BYN" : t.priced ? `${t.total} BYN` : "По запросу";
+  totalEl.textContent = !t.parts.length ? "—" : t.priced ? `${t.total} BYN` : "По запросу";
   totalEl.classList.toggle("is-ask", t.parts.length > 0 && !t.priced);
+  totalEl.classList.toggle("is-empty", !t.parts.length);
   totalNote.hidden = !(t.parts.length > 0 && !t.priced);
   shownRows = rowKeys;
   const key = t.priced ? t.total : t.parts.length;
@@ -560,7 +615,51 @@ function renderSummary() {
   upsellBox.hidden = !requiredFilled;
   syncUpsell();
   renderFps(requiredFilled);
+  renderProfile(requiredFilled);
+  shareBtn.disabled = !t.parts.length;
+  to3d.hidden = !t.parts.length;
+  sceneEl.classList.toggle("is-empty", !t.parts.length);
+  saveBuild();
 }
+
+// Сводка: клик по строке — раскрыть этот шаг и прокрутить к нему
+function editStep(key) {
+  openStep = key;
+  justOpened = key;
+  renderSteps();
+  requestAnimationFrame(() => stepEls[key]?.scrollIntoView({ behavior: motionOK ? "smooth" : "auto", block: "start" }));
+}
+
+// «Профиль» сборки одной строкой — по той же оценке, что и блок FPS (для средней тяжёлой игры на высоких)
+const profileBtn = $("#profile");
+function renderProfile(complete) {
+  const gpu = findPart("gpu", sel.gpu);
+  const noGpu = !gpu && touched.gpu && sel.gpu === null;
+  const base = gpu && gpuBaseFps(gpu);
+  const text = gpu?.pro
+    ? "Для работы с графикой и 3D"
+    : noGpu
+      ? "Для учёбы, работы и лёгких игр"
+      : !base
+        ? null
+        : base[2] >= 60
+          ? "Тянет игры в 4K"
+          : base[1] >= 60
+            ? "Игры в 2K на высоких настройках"
+            : base[0] >= 60
+              ? "Игры в Full HD на высоких настройках"
+              : base[0] >= 30
+                ? "Full HD на средних и киберспорт"
+                : "Киберспорт и нетребовательные игры";
+  profileBtn.hidden = !text;
+  if (!text) return;
+  const canJump = complete && !!base;
+  profileBtn.disabled = !canJump;
+  profileBtn.innerHTML = `<svg class="ico" aria-hidden="true"><use href="#i-game"/></svg><span></span>${canJump ? "<small>FPS ↓</small>" : ""}`;
+  profileBtn.querySelector("span").textContent = text;
+  profileBtn.title = "Примерная оценка по видеокарте";
+}
+profileBtn.addEventListener("click", () => $("#fps").scrollIntoView({ behavior: motionOK ? "smooth" : "auto", block: "start" }));
 const isComplete = () => STEPS.filter((s) => isRequired(s.key, sel)).every((s) => sel[s.key]);
 
 // ——— прогресс сборки: полоска в «Ваша сборка» и закреплённая полоска внизу экрана на телефоне ———
@@ -749,7 +848,7 @@ sendBtn.addEventListener("click", async () => {
   }
 });
 
-$("#pcReset").addEventListener("click", () => {
+function clearBuild() {
   STEPS.forEach((s) => {
     sel[s.key] = null;
     delete touched[s.key];
@@ -760,10 +859,126 @@ $("#pcReset").addEventListener("click", () => {
   extrasOffered = false;
   wasComplete = false;
   openStep = STEPS[0].key;
+}
+$("#pcReset").addEventListener("click", () => {
+  const before = encodeBuild();
+  clearBuild();
   renderSteps();
   renderCompat();
   renderSummary();
+  // сброс одним нажатием легко сделать случайно — даём вернуть
+  if (before) toast("Сборка очищена", { label: "Вернуть", run: () => applyBuild(before) });
 });
+
+// ——— сохранение сборки: в адресе страницы (#b=…) — чтобы поделиться ссылкой, и в браузере — чтобы не потерять при перезагрузке ———
+const STORE_KEY = "strela-pc-build";
+function encodeBuild() {
+  const bits = [];
+  STEPS.forEach((s) => {
+    if (sel[s.key]) bits.push(`${s.key}.${sel[s.key]}`);
+    else if (touched[s.key] && s.noneLabel) bits.push(`${s.key}.-`);
+  });
+  if (extras.size) bits.push(`x.${[...extras].join("-")}`);
+  return bits.join("~");
+}
+function shareUrl() {
+  const code = encodeBuild();
+  return code && /^https?:/.test(location.protocol) ? `${location.origin}${location.pathname}#b=${code}` : "";
+}
+function saveBuild() {
+  if (!catalogReady) return; // до загрузки каталога не затираем сохранённую сборку пустой
+  const code = encodeBuild();
+  try {
+    code ? localStorage.setItem(STORE_KEY, code) : localStorage.removeItem(STORE_KEY);
+  } catch {
+    /* хранилище недоступно (приватный режим) — просто не сохраняем */
+  }
+  const url = `${location.pathname}${location.search}${code ? `#b=${code}` : ""}`;
+  if (url !== `${location.pathname}${location.search}${location.hash}`) history.replaceState(null, "", url);
+}
+/** Восстанавливает сборку из кода; детали, которых больше нет в прайсе или которые не подходят, пропускаются. */
+function applyBuild(code) {
+  clearBuild();
+  const parts = Object.fromEntries(
+    String(code)
+      .split("~")
+      .map((b) => [b.slice(0, b.indexOf(".")), b.slice(b.indexOf(".") + 1)]),
+  );
+  let n = 0;
+  for (const s of STEPS) {
+    const v = parts[s.key];
+    if (v === "-") {
+      if (s.noneLabel && noPartAllowed(s.key, sel)) touched[s.key] = true;
+      continue;
+    }
+    const part = findPart(s.key, v);
+    if (!part || !partFits(s.key, part, sel)) continue;
+    sel[s.key] = part.id;
+    touched[s.key] = true;
+    scene.set(s.key, part);
+    n++;
+  }
+  (parts.x || "").split("-").forEach((id) => UPSELL.some((u) => u.id === id) && extras.add(id));
+  wasComplete = isComplete();
+  extrasOffered = wasComplete; // восстановленную готовую сборку окном допов не встречаем
+  openStep = STEPS.find((s) => isRequired(s.key, sel) && !sel[s.key])?.key ?? null;
+  renderSteps();
+  renderCompat();
+  renderSummary();
+  return n;
+}
+function restoreBuild() {
+  const fromLink = location.hash.startsWith("#b=") ? decodeURIComponent(location.hash.slice(3)) : "";
+  let code = fromLink;
+  if (!code) {
+    try {
+      code = localStorage.getItem(STORE_KEY) || "";
+    } catch {
+      code = "";
+    }
+  }
+  if (!code) return;
+  const n = applyBuild(code);
+  if (n) toast(fromLink ? "Открыли сборку по ссылке — можно менять детали и отправить консультанту" : "Вернули вашу прошлую сборку — продолжайте или начните заново");
+}
+
+const shareBtn = $("#pcShare");
+shareBtn.addEventListener("click", async () => {
+  const url = shareUrl();
+  if (!url) return;
+  if (navigator.share && matchMedia("(pointer:coarse)").matches) {
+    try {
+      await navigator.share({ title: "Моя сборка ПК — Strela", url });
+      return;
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Ссылка на сборку скопирована — по ней откроется ровно эта конфигурация");
+  } catch {
+    toast(url);
+  }
+});
+
+// ——— 3D: подпись пустой сцены и короткая метка «+ деталь» при выборе ———
+const sceneEl = $("#scene");
+const sceneTagEl = $("#sceneTag");
+let sceneTagTimer;
+function sceneTag(step, part) {
+  if (!part) return;
+  const s = STEPS.find((x) => x.key === step);
+  sceneTagEl.replaceChildren(el("b", "", "+"), `${s.title}: `, el("span", "", ""));
+  sceneTagEl.querySelector("span").textContent = part.name;
+  sceneTagEl.classList.remove("is-on");
+  void sceneTagEl.offsetWidth;
+  sceneTagEl.classList.add("is-on");
+  clearTimeout(sceneTagTimer);
+  sceneTagTimer = setTimeout(() => sceneTagEl.classList.remove("is-on"), 2600);
+}
+const to3d = $("#to3d");
+to3d.addEventListener("click", () => sceneEl.scrollIntoView({ behavior: motionOK ? "smooth" : "auto", block: "center" }));
 
 // ——— апсейл ———
 // карточки-переключатели: отмеченное добавляется в сводку и в сообщение консультанту
@@ -781,11 +996,21 @@ $("#upsellGrid").replaceChildren(
 // ——— тост (свой, независимый от главной страницы) ———
 const toastEl = $("#toast");
 let toastTimer;
-function toast(text) {
-  toastEl.textContent = text;
+function toast(text, action) {
+  toastEl.replaceChildren(text);
+  toastEl.classList.toggle("has-action", !!action);
+  if (action) {
+    const b = el("button", "toast__act", action.label);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      toastEl.classList.remove("is-on");
+      action.run();
+    });
+    toastEl.append(b);
+  }
   toastEl.classList.add("is-on");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("is-on"), 5200);
+  toastTimer = setTimeout(() => toastEl.classList.remove("is-on"), action ? 7000 : 5200);
 }
 
 // ——— вкладка «Подбор с ИИ» (заглушка Soon, пересылка живому консультанту) ———
@@ -871,6 +1096,8 @@ loadCatalog()
   .then(() => {
     catalogReady = true;
     renderSteps();
+    restoreBuild();
+    saveBuild();
   })
   .catch((e) => {
     console.warn("Каталог не загрузился:", e);
